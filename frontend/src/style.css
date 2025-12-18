@@ -1,26 +1,86 @@
-html {
-    background-color: rgba(27, 38, 54, 1);
-    text-align: center;
-    color: white;
-}
-
 body {
-    margin: 0;
-    color: white;
-    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
-    "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-    sans-serif;
+    background: #f0f2f5;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont;
+  }
+  
+h1 {
+    color: #1b2636;
 }
-
-@font-face {
-    font-family: "Nunito";
-    font-style: normal;
-    font-weight: 400;
-    src: local(""),
-    url("assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
-}
-
-#app {
+  .wa-root {
     height: 100vh;
-    text-align: center;
-}
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .wa-card {
+    width: 900px;
+    height: 520px;
+    background: white;
+    display: flex;
+    border-radius: 8px;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+  }
+  
+  /* LEFT */
+  .wa-left {
+    flex: 1;
+    padding: 48px;
+  }
+  
+  .wa-logo {
+    width: 40px;
+    margin-bottom: 24px;
+  }
+  
+  .wa-left h1 {
+    font-size: 26px;
+    font-weight: 500;
+    margin-bottom: 24px;
+  }
+  
+  .wa-left ol {
+    padding-left: 18px;
+    color: #3b4a54;
+    line-height: 1.8;
+  }
+  
+  .wa-login-btn {
+    margin-top: 32px;
+    background: #25d366;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  
+  /* RIGHT */
+  .wa-right {
+    width: 360px;
+    background: #f7f8fa;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .qr-box {
+    background: white;
+    padding: 16px;
+    border-radius: 6px;
+  }
+  
+  .qr-text {
+    margin-top: 16px;
+    color: #667781;
+    font-size: 14px;
+  }
+  
+  .qr-status {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #25d366;
+  }
+  
