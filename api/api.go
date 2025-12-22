@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lugvitc/whats4linux/internal/wa"
+	"github.com/nyaruka/phonenumbers"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"go.mau.fi/whatsmeow"
 )
@@ -52,4 +53,38 @@ func (a *Api) Login() error {
 		}
 	}
 	return nil
+}
+
+// Contact struct to format user info
+type Contact struct {
+	JID      string `json:"jid"`
+	FullName string `json:"full_name,omitempty"`
+	PushName string `json:"push_name"`
+}
+
+func (a *Api) Contacts() ([]Contact, error) {
+	if !a.waClient.IsLoggedIn() {
+		return nil, fmt.Errorf("no logged in")
+
+	}
+	rawContacts, err := a.waClient.Store.Contacts.GetAllContacts(a.ctx)
+	if err != nil {
+		return nil, err
+	}
+	contacts := make([]Contact, 0, len(rawContacts))
+	for jid, c := range rawContacts {
+		rawNum := "+" + jid.User
+		// Parse phone number to use as International Format
+		num, err := phonenumbers.Parse(rawNum, "")
+		if err != nil && !phonenumbers.IsValidNumber(num) {
+			continue
+		}
+
+		contacts = append(contacts, Contact{
+			JID:      phonenumbers.Format(num, phonenumbers.INTERNATIONAL),
+			FullName: c.FullName,
+			PushName: c.PushName,
+		})
+	}
+	return contacts, nil
 }

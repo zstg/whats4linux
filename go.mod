@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/mattn/go-sqlite3 v1.14.32
+	github.com/nyaruka/phonenumbers v1.6.7
 	github.com/wailsapp/wails/v2 v2.11.0
 	go.mau.fi/whatsmeow v0.0.0-20251217143725-11cf47c62d32
 )
