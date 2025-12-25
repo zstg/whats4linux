@@ -1,4 +1,4 @@
-package mstore
+package store
 
 import (
 	"sort"
