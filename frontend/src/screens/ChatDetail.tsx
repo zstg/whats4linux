@@ -167,6 +167,7 @@ function MediaContent({ message, type, chatId }: { message: mstore.Message, type
     const handleDownload = async () => {
         if (mediaSrc) return;
         setLoading(true);
+        console.log("Attempting download:", { chatId, messageId: message.Info.ID, type });
         try {
             const data = await DownloadMedia(chatId, message.Info.ID);
             
@@ -279,15 +280,43 @@ function MessageItem({ message, chatId }: { message: mstore.Message, chatId: str
     } else if (message.Content?.viewOnceMessageV2?.message?.videoMessage) {
         content = "🎥 Video (View Once V2)";
     } else if (message.Content?.documentMessage) {
+        const doc = message.Content.documentMessage;
+        const fileName = doc.fileName || "Document";
+        const fileLength = typeof doc.fileLength === 'number' ? doc.fileLength : (doc.fileLength as any)?.low || 0;
+        const extension = fileName.split('.').pop()?.toUpperCase() || "FILE";
+        
+        const formatSize = (bytes: number) => {
+            if (!bytes) return "0 B";
+            const k = 1024;
+            const sizes = ["B", "KB", "MB", "GB"];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+        };
+
         content = (
-            <div className="flex items-center gap-2">
-                <div className="p-2 bg-gray-200 dark:bg-gray-700 rounded-lg">
-                    📄
+            <div className="flex items-center gap-3 bg-black/5 dark:bg-white/5 p-2 rounded-lg min-w-[240px]">
+                <div className="w-10 h-12 bg-red-500 rounded-lg flex items-center justify-center text-white font-bold text-xs relative">
+                     <div className="absolute top-0 right-0 border-t-[12px] border-r-[12px] border-t-white/20 border-r-transparent"></div>
+                     {extension.slice(0, 4)}
                 </div>
-                <div>
-                    <div className="font-bold">{message.Content.documentMessage.fileName || "Document"}</div>
-                    <button onClick={() => {/* TODO: Download document */}} className="text-blue-500 text-sm">Download</button>
+                <div className="flex-1 min-w-0">
+                    <div className="truncate font-medium text-sm">{fileName}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {extension} • {formatSize(fileLength)}
+                    </div>
                 </div>
+                <button 
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        console.log("Attempting document download:", { chatId, messageId: message.Info.ID });
+                        DownloadMedia(chatId, message.Info.ID).catch((err) => console.error("Document download failed:", err));
+                    }}
+                    className="w-10 h-10 flex items-center justify-center border border-gray-300 dark:border-gray-600 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                >
+                    <svg viewBox="0 0 24 24" width="20" height="20" className="fill-current text-gray-500 dark:text-gray-400">
+                        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                    </svg>
+                </button>
             </div>
         );
     } else if (message.Content?.contactMessage) {

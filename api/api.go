@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/lugvitc/whats4linux/internal/mstore"
 	"github.com/lugvitc/whats4linux/internal/wa"
@@ -145,12 +148,15 @@ func (a *Api) FetchMessages(jid string) ([]mstore.Message, error) {
 }
 
 func (a *Api) DownloadMedia(chatJID string, messageID string) (string, error) {
+	fmt.Printf("DownloadMedia called with chatJID: %s, messageID: %s\n", chatJID, messageID)
 	parsedJID, err := types.ParseJID(chatJID)
 	if err != nil {
+		fmt.Printf("Error parsing JID: %v\n", err)
 		return "", err
 	}
 	msg := a.messageStore.GetMessage(parsedJID, messageID)
 	if msg == nil {
+		fmt.Printf("Message not found in store for JID: %s, MsgID: %s\n", parsedJID, messageID)
 		return "", fmt.Errorf("message not found")
 	}
 
@@ -173,6 +179,69 @@ func (a *Api) DownloadMedia(chatJID string, messageID string) (string, error) {
 
 	if downloadErr != nil {
 		return "", downloadErr
+	}
+
+	// Save to Downloads if image, video, document or audio
+	if msg.Content.ImageMessage != nil || msg.Content.VideoMessage != nil || msg.Content.DocumentMessage != nil || msg.Content.AudioMessage != nil {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get home directory: %v", err)
+		}
+		downloadsDir := filepath.Join(homeDir, "Downloads")
+
+		var fileName string
+		if msg.Content.ImageMessage != nil {
+			fileName = messageID + ".jpg" // Default to jpg
+		} else if msg.Content.VideoMessage != nil {
+			fileName = messageID + ".mp4" // Default to mp4
+		} else if msg.Content.AudioMessage != nil {
+			fileName = messageID + ".ogg" // Default to ogg
+		} else if msg.Content.DocumentMessage != nil {
+			if msg.Content.DocumentMessage.FileName != nil && *msg.Content.DocumentMessage.FileName != "" {
+				fileName = *msg.Content.DocumentMessage.FileName
+			} else {
+				fileName = messageID + ".bin"
+			}
+		}
+
+		filePath := filepath.Join(downloadsDir, fileName)
+
+		// Check if file exists
+		if _, err := os.Stat(filePath); err == nil {
+			// File exists, prompt user to save as
+			newPath, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+				DefaultDirectory: downloadsDir,
+				DefaultFilename:  fileName,
+				Title:           "File already exists. Save as...",
+				Filters: []runtime.FileFilter{
+					{
+						DisplayName: "Media Files",
+						Pattern:     "*" + filepath.Ext(fileName),
+					},
+				},
+			})
+			if err != nil {
+				return "", err
+			}
+			if newPath == "" {
+				return "", fmt.Errorf("download cancelled")
+			}
+			filePath = newPath
+			fileName = filepath.Base(filePath)
+		}
+
+		if err := os.WriteFile(filePath, data, 0644); err != nil {
+			return "", fmt.Errorf("failed to save file: %v", err)
+		}
+
+		// Try sending a Linux desktop notification with notify-send (best-effort)
+		if _, lookErr := exec.LookPath("notify-send"); lookErr == nil {
+			// include full path so the user knows where it was saved
+			_ = exec.Command("notify-send", "whats4linux", fmt.Sprintf("Downloaded: %s", filePath)).Run()
+		}
+
+		// Emit event for frontend listeners as well
+		runtime.EventsEmit(a.ctx, "download:complete", fileName)
 	}
 
 	return base64.StdEncoding.EncodeToString(data), nil
