@@ -16,7 +16,7 @@ jobs:
           ref: ${{ github.head_ref }}
 
       - name: Run Prettier
-        uses: creyP/prettier_action@v4.6
+        uses: creyD/prettier_action@v4.6
         with:
           prettier_options: --write "frontend/src/**/*.{js,ts,jsx,tsx,vue,css,scss}"
           commit_message: "chore: format frontend with prettier"
