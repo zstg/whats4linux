@@ -8,11 +8,13 @@ const DropDown = ({
   elements,
   icon,
   onToggle,
+  placeholder = "Select an option",
 }: {
   title: string
   elements: string[]
   icon?: React.ReactNode
   onToggle: (element: string) => void
+  placeholder?: string
 }) => {
   const [onOpen, setOnOpen] = useState(false)
   const [selectedElement, setSelectedElement] = useState<string | null>(null)
@@ -85,7 +87,7 @@ const DropDown = ({
       >
         <div className="flex items-center gap-2">
           {icon}
-          <span>{selectedElement || "Select an option"}</span>
+          <span>{selectedElement || placeholder}</span>
         </div>
         <span ref={arrowRef} className="inline-block">
           ▼

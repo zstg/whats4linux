@@ -1,3 +1,4 @@
+import ComponentColorSelector from "../../components/settings/ComponentColorSelector"
 import SettingButtonDesc from "../../components/settings/SettingButtonDesc"
 import { useAppSettingsStore } from "../../store/useAppSettingsStore"
 
@@ -24,6 +25,7 @@ const ChatsSettingsScreen = () => {
         onToggle={() => updateSetting("enterIsSend", !enterIsSend)}
         isEnabled={enterIsSend}
       />
+      <ComponentColorSelector />
     </div>
   )
 }

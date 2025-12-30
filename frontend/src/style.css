@@ -13,6 +13,16 @@
   --color-green: #21c063;
   --color-hover-icons: #2d2e2e;
 
+  /* Toggle Button */
+  --color-toggle-bg: #21c063;
+  --color-toggle-dark-bg: #21c063;
+
+  --color-toggle-closed: #4a5565;
+  --color-toggle-dark-closed: #4a5565;
+
+  --color-toggle-circle: #000000;
+  --color-toggle-dark-circle: #ffffff;
+
   /* Dropdown */
   --color-dropdown-text: #000000;
   --color-dropdown-dark-text: #ffffff;

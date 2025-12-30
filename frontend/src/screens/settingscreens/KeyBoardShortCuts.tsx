@@ -42,7 +42,7 @@ const shortcuts: Shortcut[] = [
   { name: "Extended search", shortcut: ["Alt", "K"] },
 ]
 
-const SingleShortcut = ({ name, shortcut }: Shortcut) => {
+export const SingleShortcut = ({ name, shortcut }: Shortcut) => {
   return (
     <div className="flex flex-row gap-2 justify-between">
       <div className="text-black dark:text-white text-xl">{name}</div>

@@ -30,11 +30,16 @@ const ToggleButton = ({ isEnabled, onToggle }: ToggleButtonProps) => {
     <div
       className={clsx(
         "h-7 w-12 rounded-full flex items-center px-1 cursor-pointer shrink-0 transition-colors duration-300",
-        isEnabled ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600",
+        isEnabled
+          ? "bg-toggle-bg dark:bg-toggle-dark-bg"
+          : "bg-toggle-closed dark:bg-toggle-dark-closed",
       )}
       onClick={handleClick}
     >
-      <div className="size-5 rounded-full bg-white shadow-md translate-x-0" ref={circleRef} />
+      <div
+        className="size-5 rounded-full bg-toggle-circle dark:bg-toggle-dark-circle shadow-md translate-x-0"
+        ref={circleRef}
+      />
     </div>
   )
 }

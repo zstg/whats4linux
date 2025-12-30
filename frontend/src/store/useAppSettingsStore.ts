@@ -1,17 +1,20 @@
 import { create } from "zustand"
 import { GetSettings, SaveSettings } from "../../wailsjs/go/api/Api"
+import { THEME, applyThemeColors } from "../theme.config"
 
 interface AppSettingsStore extends AppSettings {
   loaded: boolean
 
   loadSettings: () => Promise<void>
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>
+  updateThemeColor: (group: keyof typeof THEME, label: string, value: string) => Promise<void>
   toggleTheme: () => Promise<void>
 }
 
 export interface AppSettings {
   // Theme
   theme: "light" | "dark"
+  themeColors: typeof THEME
 
   // Privacy Settings
   readReceipts: boolean
@@ -42,7 +45,7 @@ export interface AppSettings {
 
 const defaultSettings: AppSettings = {
   theme: "light",
-
+  themeColors: THEME,
   readReceipts: true,
   blockUnknown: false,
   disableLinkPreviews: false,
@@ -84,12 +87,19 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
         ...(saved ?? {}),
       }
 
+      // ⭐ apply to CSS
+      applyThemeColors(merged.themeColors)
+
       set({
         ...merged,
         loaded: true,
       })
     } catch (err) {
       console.error("Failed to load settings:", err)
+
+      // fallback to defaults
+      applyThemeColors(defaultSettings.themeColors)
+
       set({ loaded: true })
     }
   },
@@ -109,5 +119,28 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
   toggleTheme: async () => {
     const theme = get().theme === "light" ? "dark" : "light"
     await get().updateSetting("theme", theme)
+  },
+
+  updateThemeColor: async (group, label, value) => {
+    set(state => {
+      const next = {
+        ...state,
+        themeColors: {
+          ...state.themeColors,
+          [group]: {
+            ...state.themeColors[group],
+            [label]: value,
+          },
+        },
+      }
+
+      // ⭐ apply to CSS
+      applyThemeColors(next.themeColors)
+
+      // ⭐ persist
+      SaveSettings(extractSettings(next)).catch(console.error)
+
+      return next
+    })
   },
 }))
