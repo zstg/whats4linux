@@ -612,3 +612,11 @@ func (a *Api) SendChatPresence(jid string, cp types.ChatPresence, cpm types.Chat
 	}
 	return a.waClient.SendChatPresence(a.ctx, parsedJid, cp, cpm)
 }
+
+func (a *Api) SaveSettings(s map[string]any) {
+	// todo: implement settings save
+}
+
+func (a *Api) GetSettings() map[string]any {
+	return make(map[string]any)
+}
