@@ -5,11 +5,6 @@ const NotificationsSettingsScreen = () => {
   return (
     <div className="flex flex-col gap-4">
       <SettingButtonDesc
-        title="Enter is send"
-        description="Pressing Enter will send the message instead of creating a new line"
-        settingtoggle={() => {}}
-      />
-      <SettingButtonDesc
         title="Message notifications"
         description="Show notifications for new messages"
         settingtoggle={() => {}}

@@ -169,13 +169,12 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
   }
 
   // Emoji picker
-  const handleEmojiClick = (emojiData: { emoji: string }) => {
-    setInputText(prev => prev + emojiData.emoji)
+  const handleEmojiClick = (emoji: string) => {
+    setInputText(prev => prev + emoji)
     setShowEmojiPicker(false)
     textareaRef.current?.focus()
     setTimeout(adjustTextareaHeight, 0)
   }
-
   // Effects
   useEffect(() => {
     loadMessages()
