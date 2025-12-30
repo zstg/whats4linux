@@ -1,22 +1,30 @@
 import SettingButtonDesc from "../../components/settings/SettingButtonDesc"
+import { useAppSettingsStore } from "../../store/useAppSettingsStore"
 
 const PrivacySettingsScreen = () => {
+  const { readReceipts, blockUnknown, disableLinkPreviews, updateSetting } = useAppSettingsStore()
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-8 p-6 max-w-2xl mx-auto">
       <SettingButtonDesc
         title="Read Receipts"
         description="If turned off, you won't send or receive read receipts. Read receipts are always sent for group chats."
-        settingtoggle={() => {}} // TODO for future me: zustand read recipts toggle
+        isEnabled={readReceipts}
+        onToggle={() => updateSetting("readReceipts", !readReceipts)}
       />
+
       <SettingButtonDesc
         title="Block Unknown Account Messages"
         description="To protect your account and improve device performance, WhatsApp will block messages from unknown accounts if they exceed a certain volume."
-        settingtoggle={() => {}}
+        isEnabled={blockUnknown}
+        onToggle={() => updateSetting("blockUnknown", !blockUnknown)}
       />
+
       <SettingButtonDesc
         title="Disable Link Previews"
         description="To help protect your IP address from being inferred by third-party websites, previews for the links you share in chats will no longer be generated. Learn more"
-        settingtoggle={() => {}}
+        isEnabled={disableLinkPreviews}
+        onToggle={() => updateSetting("disableLinkPreviews", !disableLinkPreviews)}
       />
     </div>
   )

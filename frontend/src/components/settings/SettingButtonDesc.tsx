@@ -1,21 +1,19 @@
 import Button from "./ToggleButton"
-const SettingButtonDesc = ({
-  title,
-  description,
-  settingtoggle,
-}: {
+interface SettingButtonDescProps {
   title: string
   description: string
-  settingtoggle: () => void
-}) => {
+  isEnabled: boolean
+  onToggle: () => void
+}
+
+const SettingButtonDesc = ({ title, description, isEnabled, onToggle }: SettingButtonDescProps) => {
   return (
-    <div className="flex flex-row justify-between">
-      <div className="flex flex-col">
-        {/* on dark mode, this should turn white using zustand  */}
-        <div className="text-xl text-black dark:text-white">{title}</div>
-        <div className="text-md">{description}</div>
+    <div className="flex flex-row justify-between items-start py-4">
+      <div className="flex flex-col flex-1 pr-6">
+        <h3 className="text-lg font-medium text-black dark:text-white">{title}</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{description}</p>
       </div>
-      <Button onClick={settingtoggle} />
+      <Button isEnabled={isEnabled} onToggle={onToggle} />
     </div>
   )
 }
