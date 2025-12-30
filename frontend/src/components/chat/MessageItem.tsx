@@ -4,6 +4,7 @@ import { DownloadMedia, GetContact } from "../../../wailsjs/go/api/Api"
 import { parseWhatsAppMarkdown } from "../../utils/markdown"
 import { MediaContent } from "./MediaContent"
 import { QuotedMessage } from "./QuotedMessage"
+import clsx from "clsx"
 import { MessageMenu } from "./MessageMenu"
 
 interface MessageItemProps {
@@ -174,15 +175,19 @@ export function MessageItem({ message, chatId, sentMediaCache }: MessageItemProp
   }
 
   return (
-    <div className={`flex ${isFromMe ? "justify-end" : "justify-start"} mb-2 group`}>
+    <div className={clsx("flex mb-2 group", isFromMe ? "justify-end" : "justify-start")}>
       <div
-        className={`max-w-[75%] rounded-lg p-2 shadow-sm relative ${
-          isSticker
-            ? "bg-transparent shadow-none"
-            : isFromMe
-              ? "bg-[#d9fdd3] dark:bg-[#005c4b] text-gray-900 dark:text-white"
-              : "bg-white dark:bg-[#202c33] text-gray-900 dark:text-white"
-        }`}
+        className={clsx("max-w-[75%] rounded-lg p-2 shadow-sm relative", {
+          "bg-transparent shadow-none": isSticker,
+
+          // SENT
+          "bg-sent-bubble-bg dark:bg-sent-bubble-dark-bg text-(--color-sent-bubble-text) dark:text-(--color-sent-bubble-dark-text)":
+            isFromMe && !isSticker,
+
+          // RECEIVED
+          "bg-received-bubble-bg dark:bg-received-bubble-dark-bg text-(--color-received-bubble-text) dark:text-(--color-received-bubble-dark-text)":
+            !isFromMe && !isSticker,
+        })}
       >
         {/* Message Menu - positioned at top right corner */}
         <MessageMenu
@@ -209,6 +214,31 @@ export function MessageItem({ message, chatId, sentMediaCache }: MessageItemProp
             hour: "2-digit",
             minute: "2-digit",
           })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export const MessagePreview = () => {
+  return (
+    <div className="flex flex-col gap-3 w-65">
+      <div className="flex justify-start">
+        <div
+          className="max-w-[80%] px-3 py-2 rounded-lg text-sm shadow-sm
+            bg-received-bubble-bg dark:bg-received-bubble-dark-bg 
+            text-received-bubble-text dark:text-received-bubble-dark-text"
+        >
+          hey 👋
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <div
+          className="max-w-[80%] px-3 py-2 rounded-lg text-sm shadow-sm
+            bg-sent-bubble-bg dark:bg-sent-bubble-dark-bg 
+            text-sent-bubble-text dark:text-sent-bubble-dark-text"
+        >
+          what's up 😎
         </div>
       </div>
     </div>
