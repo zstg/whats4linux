@@ -1,7 +1,15 @@
 import { create } from "zustand"
 import { GetSettings, SaveSettings } from "../../wailsjs/go/api/Api"
 
-interface AppSettings {
+interface AppSettingsStore extends AppSettings {
+  loaded: boolean
+
+  loadSettings: () => Promise<void>
+  updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>
+  toggleTheme: () => Promise<void>
+}
+
+export interface AppSettings {
   // Theme
   theme: "light" | "dark"
 
@@ -32,24 +40,13 @@ interface AppSettings {
   enterIsSend: boolean
 }
 
-interface AppSettingsStore extends AppSettings {
-  loaded: boolean
-
-  loadSettings: () => Promise<void>
-  updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>
-  toggleTheme: () => Promise<void>
-}
-
-export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
-  // Theme
+const defaultSettings: AppSettings = {
   theme: "light",
 
-  // Privacy Settings
   readReceipts: true,
   blockUnknown: false,
   disableLinkPreviews: false,
 
-  // Notifications Settings
   messageNotifications: true,
   showPreviews: true,
   showReactionNotifications: true,
@@ -59,52 +56,36 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
   incomingSounds: true,
   outgoingSounds: true,
 
-  // General Settings
   startAtLogin: false,
   minimizeToTray: true,
   language: "English",
   fontSize: "100% (Default)",
 
-  // Chats Settings
   spellCheck: true,
   replaceTextWithEmojis: true,
   enterIsSend: false,
+}
 
+function extractSettings(state: AppSettingsStore): AppSettings {
+  const { loaded, ...settings } = state
+  return settings
+}
+
+export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
+  ...defaultSettings,
   loaded: false,
 
   loadSettings: async () => {
     try {
-      const settings = await GetSettings()
+      const saved = await GetSettings()
+
+      const merged = {
+        ...defaultSettings,
+        ...(saved ?? {}),
+      }
+
       set({
-        // Theme
-        theme: settings.theme ?? "light",
-
-        // Privacy Settings
-        readReceipts: settings.readReceipts ?? true,
-        blockUnknown: settings.blockUnknown ?? false,
-        disableLinkPreviews: settings.disableLinkPreviews ?? false,
-
-        // Notifications Settings
-        messageNotifications: settings.messageNotifications ?? true,
-        showPreviews: settings.showPreviews ?? true,
-        showReactionNotifications: settings.showReactionNotifications ?? true,
-        statusReactions: settings.statusReactions ?? true,
-        callNotifications: settings.callNotifications ?? true,
-        incomingCallSounds: settings.incomingCallSounds ?? true,
-        incomingSounds: settings.incomingSounds ?? true,
-        outgoingSounds: settings.outgoingSounds ?? true,
-
-        // General Settings
-        startAtLogin: settings.startAtLogin ?? false,
-        minimizeToTray: settings.minimizeToTray ?? true,
-        language: settings.language ?? "English",
-        fontSize: settings.fontSize ?? "100% (Default)",
-
-        // Chats Settings
-        spellCheck: settings.spellCheck ?? true,
-        replaceTextWithEmojis: settings.replaceTextWithEmojis ?? true,
-        enterIsSend: settings.enterIsSend ?? false,
-
+        ...merged,
         loaded: true,
       })
     } catch (err) {
@@ -114,46 +95,19 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
   },
 
   updateSetting: async (key, value) => {
-    set({ [key]: value })
-    try {
-      const current = get()
-      await SaveSettings({
-        // Theme
-        theme: current.theme,
+    set(state => {
+      const next = { ...state, [key]: value }
 
-        // Privacy Settings
-        readReceipts: current.readReceipts,
-        blockUnknown: current.blockUnknown,
-        disableLinkPreviews: current.disableLinkPreviews,
-
-        // Notifications Settings
-        messageNotifications: current.messageNotifications,
-        showPreviews: current.showPreviews,
-        showReactionNotifications: current.showReactionNotifications,
-        statusReactions: current.statusReactions,
-        callNotifications: current.callNotifications,
-        incomingCallSounds: current.incomingCallSounds,
-        incomingSounds: current.incomingSounds,
-        outgoingSounds: current.outgoingSounds,
-
-        // General Settings
-        startAtLogin: current.startAtLogin,
-        minimizeToTray: current.minimizeToTray,
-        language: current.language,
-        fontSize: current.fontSize,
-
-        // Chats Settings
-        spellCheck: current.spellCheck,
-        replaceTextWithEmojis: current.replaceTextWithEmojis,
-        enterIsSend: current.enterIsSend,
+      SaveSettings(extractSettings(next)).catch(err => {
+        console.error("Failed to save setting:", err)
       })
-    } catch (err) {
-      console.error("Failed to save setting:", err)
-    }
+
+      return next
+    })
   },
 
   toggleTheme: async () => {
-    const newTheme = get().theme === "light" ? "dark" : "light"
-    await get().updateSetting("theme", newTheme)
+    const theme = get().theme === "light" ? "dark" : "light"
+    await get().updateSetting("theme", theme)
   },
 }))

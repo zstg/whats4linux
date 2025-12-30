@@ -32,7 +32,12 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
   const emojiPickerRef = useRef<HTMLDivElement>(null)
   const emojiButtonRef = useRef<HTMLButtonElement>(null)
 
-  // Message loading and scrolling
+  const scrollToBottom = (instant = false) => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: instant ? "auto" : "smooth" })
+    }, 50)
+  }
+
   const loadMessages = () => {
     FetchMessages(chatId)
       .then((msgs: store.Message[]) => {
@@ -42,20 +47,11 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
       .catch(console.error)
   }
 
-  const scrollToBottom = (instant = false) => {
-    messagesEndRef.current?.scrollIntoView({ behavior: instant ? "auto" : "smooth" })
-  }
-
-  // Input handling
   const adjustTextareaHeight = () => {
     const textarea = textareaRef.current
     if (!textarea) return
-
     textarea.style.height = "auto"
-    const scrollHeight = textarea.scrollHeight
-    const lineHeight = parseInt(getComputedStyle(textarea).lineHeight)
-    const maxHeight = lineHeight * 8
-    textarea.style.height = Math.min(scrollHeight, maxHeight) + "px"
+    textarea.style.height = Math.min(textarea.scrollHeight, 192) + "px"
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -63,40 +59,24 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
     adjustTextareaHeight()
 
     setTypingIndicator(chatId, true)
-
-    // Send composing presence
     SendChatPresence(chatId, "composing", "").catch(() => {})
 
-    // Clear existing timeout
-    if (typingTimeout) {
-      clearTimeout(typingTimeout)
-    }
-
+    if (typingTimeout) clearTimeout(typingTimeout)
     const timeout = setTimeout(() => {
       SendChatPresence(chatId, "paused", "").catch(() => {})
       setTypingIndicator(chatId, false)
-    }, 1000)
-
+    }, 1500)
     setTypingTimeout(timeout)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSendMessage()
-    }
   }
 
   const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData?.items
     if (!items) return
-
     for (const item of items) {
       if (item.type.indexOf("image") !== -1) {
         e.preventDefault()
         const file = item.getAsFile()
         if (!file) continue
-
         const reader = new FileReader()
         reader.onload = event => {
           setPastedImage(event.target?.result as string)
@@ -108,13 +88,10 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
     }
   }
 
-  // File handling
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
     setSelectedFile(file)
-
     if (file.type.startsWith("image/")) setSelectedFileType("image")
     else if (file.type.startsWith("video/")) setSelectedFileType("video")
     else if (file.type.startsWith("audio/")) setSelectedFileType("audio")
@@ -123,12 +100,19 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
 
   const removeSelectedFile = () => {
     setSelectedFile(null)
+    setPastedImage(null)
     setSelectedFileType("")
     if (fileInputRef.current) fileInputRef.current.value = ""
     setTimeout(adjustTextareaHeight, 0)
   }
 
-  // Message sending
+  const handleEmojiClick = (emoji: string) => {
+    setInputText(prev => prev + emoji)
+    setShowEmojiPicker(false)
+    textareaRef.current?.focus()
+    setTimeout(adjustTextareaHeight, 0)
+  }
+
   const handleSendMessage = async () => {
     if (!inputText.trim() && !pastedImage && !selectedFile) return
 
@@ -137,63 +121,62 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
     const fileToSend = selectedFile
     const fileTypeToSend = selectedFileType
 
-    // Reset state
     setInputText("")
     setPastedImage(null)
     setSelectedFile(null)
     setSelectedFileType("")
-
     if (textareaRef.current) textareaRef.current.style.height = "auto"
-    if (fileInputRef.current) fileInputRef.current.value = ""
 
-    // Create optimistic message
-    const tempMsg = createTempMessage(textToSend, imageToSend, fileToSend, fileTypeToSend)
+    const tempId = `temp-${Date.now()}`
+    const tempMsg: any = {
+      Info: { ID: tempId, IsFromMe: true, Timestamp: new Date().toISOString() },
+      Content: imageToSend
+        ? { imageMessage: { caption: textToSend, _tempImage: imageToSend } }
+        : fileToSend
+          ? { [`${fileTypeToSend}Message`]: { caption: textToSend, _tempFile: fileToSend } }
+          : { conversation: textToSend },
+    }
+
     setMessages(chatId, [...chatMessages, tempMsg])
-    setTimeout(scrollToBottom, 100)
+    scrollToBottom()
 
     try {
-      await sendMessageContent(
-        chatId,
-        textToSend,
-        imageToSend,
-        fileToSend,
-        fileTypeToSend,
-        sentMediaCache,
-      )
+      if (imageToSend) {
+        const base64 = imageToSend.split(",")[1]
+        const newId = await SendMessage(chatId, {
+          type: "image",
+          base64Data: base64,
+          text: textToSend,
+        })
+        if (newId) sentMediaCache.current.set(newId, imageToSend)
+      } else if (fileToSend) {
+        const reader = new FileReader()
+        reader.onload = async event => {
+          const base64 = (event.target?.result as string).split(",")[1]
+          const newId = await SendMessage(chatId, {
+            type: fileTypeToSend,
+            base64Data: base64,
+            text: textToSend,
+          })
+          if (newId) sentMediaCache.current.set(newId, event.target?.result as string)
+        }
+        reader.readAsDataURL(fileToSend)
+      } else {
+        await SendMessage(chatId, { type: "text", text: textToSend })
+      }
       loadMessages()
     } catch (err) {
-      console.error("Failed to send message:", err)
-      setMessages(
-        chatId,
-        chatMessages.filter((m: any) => m.Info.ID !== tempMsg.Info.ID),
-      )
+      console.error("Failed to send:", err)
+      setMessages(chatId, chatMessages)
       setInputText(textToSend)
-      setPastedImage(imageToSend)
-      setSelectedFile(fileToSend)
-      setSelectedFileType(fileTypeToSend)
-      setTimeout(adjustTextareaHeight, 0)
     }
   }
 
-  // Emoji picker
-  const handleEmojiClick = (emoji: string) => {
-    setInputText(prev => prev + emoji)
-    setShowEmojiPicker(false)
-    textareaRef.current?.focus()
-    setTimeout(adjustTextareaHeight, 0)
-  }
-  // Effects
   useEffect(() => {
     loadMessages()
     const unsub = EventsOn("wa:new_message", loadMessages)
     return () => unsub()
   }, [chatId])
-
-  useEffect(() => {
-    return () => {
-      if (typingTimeout) clearTimeout(typingTimeout)
-    }
-  }, [typingTimeout])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -206,25 +189,19 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
         setShowEmojiPicker(false)
       }
     }
-
-    if (showEmojiPicker) {
-      document.addEventListener("mousedown", handleClickOutside)
-    }
-
+    if (showEmojiPicker) document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [showEmojiPicker, setShowEmojiPicker])
+  }, [showEmojiPicker])
 
   return (
     <div className="flex flex-col h-full bg-[#efeae2] dark:bg-[#0b141a]">
       <ChatHeader chatName={chatName} chatAvatar={chatAvatar} onBack={onBack} />
-
       <MessageList
         chatId={chatId}
         messages={chatMessages}
         messagesEndRef={messagesEndRef}
         sentMediaCache={sentMediaCache}
       />
-
       <ChatInput
         inputText={inputText}
         pastedImage={pastedImage}
@@ -236,7 +213,9 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
         emojiPickerRef={emojiPickerRef}
         emojiButtonRef={emojiButtonRef}
         onInputChange={handleInputChange}
-        onKeyDown={handleKeyDown}
+        onKeyDown={e =>
+          e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSendMessage())
+        }
         onPaste={handlePaste}
         onSendMessage={handleSendMessage}
         onFileSelect={handleFileSelect}
@@ -246,73 +225,4 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
       />
     </div>
   )
-}
-
-// Helper functions
-function createTempMessage(
-  text: string,
-  image: string | null,
-  file: File | null,
-  fileType: string,
-): any {
-  const tempId = `temp-${Date.now()}`
-
-  let content: any
-  if (image) {
-    content = { imageMessage: { caption: text, _tempImage: image } }
-  } else if (file) {
-    content = { [`${fileType}Message`]: { caption: text, _tempFile: file } }
-  } else {
-    content = { conversation: text }
-  }
-
-  return {
-    Info: {
-      ID: tempId,
-      IsFromMe: true,
-      Timestamp: new Date().toISOString(),
-    },
-    Content: content,
-  }
-}
-
-async function sendMessageContent(
-  chatId: string,
-  text: string,
-  image: string | null,
-  file: File | null,
-  fileType: string,
-  cache: React.MutableRefObject<Map<string, string>>,
-) {
-  if (image) {
-    const base64 = image.split(",")[1]
-    const newId = await SendMessage(chatId, {
-      type: "image",
-      base64Data: base64,
-      text,
-    })
-    if (newId) cache.current.set(newId, image)
-  } else if (file) {
-    const reader = new FileReader()
-    return new Promise<void>((resolve, reject) => {
-      reader.onload = async event => {
-        try {
-          const base64 = (event.target?.result as string).split(",")[1]
-          const newId = await SendMessage(chatId, {
-            type: fileType,
-            base64Data: base64,
-            text,
-          })
-          if (newId) cache.current.set(newId, event.target?.result as string)
-          resolve()
-        } catch (err) {
-          reject(err)
-        }
-      }
-      reader.onerror = reject
-      reader.readAsDataURL(file)
-    })
-  } else {
-    await SendMessage(chatId, { type: "text", text })
-  }
 }
