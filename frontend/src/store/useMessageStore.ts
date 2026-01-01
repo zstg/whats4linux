@@ -20,13 +20,12 @@ export const useMessageStore = create<MessageStore>((set, get) => ({
     const state = get()
     const prevChatId = state.activeChatId
 
-    // When switching chats, trim the previous chat's messages to just the last one
-    if (prevChatId && prevChatId !== chatId && state.messages[prevChatId]?.length > 1) {
+    if (prevChatId && prevChatId !== chatId && state.messages[prevChatId]?.length > 20) {
       const prevMessages = state.messages[prevChatId]
       set(s => ({
         messages: {
           ...s.messages,
-          [prevChatId]: [prevMessages[prevMessages.length - 1]], // Keep only last message
+          [prevChatId]: prevMessages.slice(-20),
         },
         activeChatId: chatId,
       }))

@@ -17,7 +17,6 @@ export function MediaContent({ message, type, chatId, sentMediaCache }: MediaCon
     const content = message.Content as any
     const messageBody = content?.[`${type}Message`]
 
-    // Check for Optimistic (Temporary) Media
     if (messageBody?._tempImage) {
       setMediaSrc(messageBody._tempImage)
     } else if (messageBody?._tempFile) {
@@ -27,15 +26,14 @@ export function MediaContent({ message, type, chatId, sentMediaCache }: MediaCon
       setMediaSrc(sentMediaCache.current.get(message.Info.ID)!)
     }
 
-    // Auto-download stickers
     if (type === "sticker") handleDownload()
   }, [message.Info.ID])
 
-  // Cleanup blob URLs on unmount to prevent memory leaks
   useEffect(() => {
+    const currentSrc = mediaSrc
     return () => {
-      if (mediaSrc?.startsWith("blob:")) {
-        URL.revokeObjectURL(mediaSrc)
+      if (currentSrc?.startsWith("blob:")) {
+        URL.revokeObjectURL(currentSrc)
       }
     }
   }, [mediaSrc])

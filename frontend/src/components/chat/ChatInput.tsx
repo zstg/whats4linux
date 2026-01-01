@@ -3,7 +3,8 @@ import clsx from "clsx"
 import data from "@emoji-mart/data"
 import { EmojiIcon, AttachIcon, SendIcon, CloseIcon } from "../../assets/svgs/chat_icons"
 import { store } from "../../../wailsjs/go/models"
-const EmojiPicker = React.lazy(() => import("@emoji-mart/react"))
+
+const EmojiPicker = lazy(() => import("@emoji-mart/react"))
 interface ChatInputProps {
   inputText: string
   pastedImage: string | null
@@ -159,7 +160,7 @@ export function ChatInput({
   }
 
   return (
-    <div className="relative p-3 bg-light-secondary dark:bg-[#202c33]">
+    <div className="relative p-3 bg-light-secondary dark:bg-received-bubble-dark-bg">
       {showEmojiPicker && (
         <div ref={emojiPickerRef} className="absolute bottom-20 left-4 z-50">
           <Suspense fallback={<div className="p-4 text-sm">Loading emojis...</div>}>

@@ -19,6 +19,7 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
     useMessageStore()
   const { setTypingIndicator, showEmojiPicker, setShowEmojiPicker } = useUIStore()
 
+  const isComposingRef = useRef(false)
   const chatMessages = messages[chatId] || []
   const [inputText, setInputText] = useState("")
   const [pastedImage, setPastedImage] = useState<string | null>(null)
@@ -149,11 +150,16 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
     setInputText(e.target.value)
     adjustTextareaHeight()
 
-    setTypingIndicator(chatId, true)
-    SendChatPresence(chatId, "composing", "").catch(() => {})
+    // only send "composing" if we aren't already marked as composing
+    if (!isComposingRef.current) {
+      isComposingRef.current = true
+      setTypingIndicator(chatId, true)
+      SendChatPresence(chatId, "composing", "").catch(() => {})
+    }
 
     if (typingTimeout) clearTimeout(typingTimeout)
     const timeout = setTimeout(() => {
+      isComposingRef.current = false
       SendChatPresence(chatId, "paused", "").catch(() => {})
       setTypingIndicator(chatId, false)
     }, 1500)

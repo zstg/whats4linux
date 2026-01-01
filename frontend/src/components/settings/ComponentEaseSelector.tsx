@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback, Fragment } from "react"
 import { gsap } from "gsap"
 import { CustomEase } from "gsap/CustomEase"
 import { PathEditor } from "gsap/utils/PathEditor"
@@ -36,8 +36,7 @@ const COMPONENTS = {
 const GSAPMasterVisualizer = () => {
   const [component, setComponent] = useState<keyof typeof COMPONENTS | null>(null)
   const [prop, setProp] = useState<string | null>(null)
-
-  const { eases, updateEase } = useEaseStore()
+  const { eases, updateEase: saveEaseToStore } = useEaseStore()
 
   const [easeString, setEaseString] = useState(INITIAL_EASE_STRING)
   const [dirty, setDirty] = useState(false)
@@ -54,11 +53,13 @@ const GSAPMasterVisualizer = () => {
   const tweenRef = useRef<gsap.core.Tween | null>(null)
   const editorRef = useRef<any>(null)
 
-  // load stored ease when selection changes
+  // Load stored ease when selection changes
   useEffect(() => {
-    if (component && prop) {
-      setEaseString((eases as any)[component][prop])
+    if (component && prop && (eases as any)[component][prop]) {
+      const storedPath = (eases as any)[component][prop]
+      setEaseString(storedPath)
       setDirty(false)
+      // Ideally, you'd convert 0-1 string back to 0-500 SVG grid path here
     }
   }, [component, prop, eases])
 
@@ -66,7 +67,9 @@ const GSAPMasterVisualizer = () => {
     if (!editorRef.current || !jointRef.current) return
 
     let errored = false
-    const onError = () => (errored = true)
+    const onError = () => {
+      errored = true
+    }
 
     let normalized: string
     try {
@@ -79,32 +82,30 @@ const GSAPMasterVisualizer = () => {
     setIsInvalid(errored)
     setEaseString(normalized)
 
-    if (!errored) setDirty(true)
+    if (!errored) {
+      setDirty(true)
+      const newEase = CustomEase.create(`liveEase_${Date.now()}`, normalized)
 
-    if (errored) return
+      // FIX: Kill old and restart new loop
+      tweenRef.current?.kill()
+      gsap.set(jointRef.current, { attr: { cy: 500 } })
 
-    tweenRef.current?.kill()
-
-    const newEase = CustomEase.create(`liveEase_${Date.now()}`, normalized)
-
-    gsap.set(jointRef.current, { attr: { cy: 500 } })
-
-    tweenRef.current = gsap.to(jointRef.current, {
-      duration,
-      repeat: -1,
-      attr: { cy: 0 },
-      ease: newEase,
-      onUpdate() {
-        const p = this.progress()
-        const cy = gsap.getProperty(jointRef.current, "cy") as number
-        const value = 500 - cy
-
-        progressTextRef.current!.textContent = p.toFixed(2)
-        valueTextRef.current!.textContent = Math.round(value).toString()
-        gsap.set(horizontalFillRef.current, { scaleX: p })
-      },
-    })
-  }, [duration, component, prop, updateEase])
+      tweenRef.current = gsap.to(jointRef.current, {
+        duration,
+        repeat: -1,
+        attr: { cy: 0 },
+        ease: newEase,
+        onUpdate() {
+          const p = this.progress()
+          const cy = gsap.getProperty(jointRef.current, "cy") as number
+          const val = 500 - cy
+          if (progressTextRef.current) progressTextRef.current.textContent = p.toFixed(2)
+          if (valueTextRef.current) valueTextRef.current.textContent = Math.round(val).toString()
+          if (horizontalFillRef.current) gsap.set(horizontalFillRef.current, { scaleX: p })
+        },
+      })
+    }
+  }, [duration])
 
   const handlePresetChange = useCallback(
     (name: string) => {
@@ -127,31 +128,31 @@ const GSAPMasterVisualizer = () => {
   useEffect(() => {
     if (!mainPathRef.current || !jointRef.current) return
 
+    // Setup initial circle pos
     gsap.set(jointRef.current, { attr: { cx: 500, cy: 500 } })
 
-    const initialEase = CustomEase.create("initial", INITIAL_EASE_STRING)
-
+    // Initial loop
     tweenRef.current = gsap.to(jointRef.current, {
       duration,
       repeat: -1,
       attr: { cy: 0 },
-      ease: initialEase,
+      ease: CustomEase.create("initial", INITIAL_EASE_STRING),
       onUpdate() {
         const p = this.progress()
         const cy = gsap.getProperty(jointRef.current, "cy") as number
-        const value = 500 - cy
-
-        progressTextRef.current!.textContent = p.toFixed(2)
-        valueTextRef.current!.textContent = Math.round(value).toString()
-        gsap.set(horizontalFillRef.current, { scaleX: p })
+        if (progressTextRef.current) progressTextRef.current.textContent = p.toFixed(2)
+        if (valueTextRef.current) valueTextRef.current.textContent = Math.round(500 - cy).toString()
+        if (horizontalFillRef.current) gsap.set(horizontalFillRef.current, { scaleX: p })
       },
     })
 
+    // Setup PathEditor with Snap Logic
     editorRef.current = PathEditor.create(mainPathRef.current, {
       handleSize: 12,
       draggable: true,
       selected: true,
       anchorSnap: (p: { x: number; y: number }) => {
+        // 1. Hard Corner Snapping
         if (p.x * p.x + (p.y - 500) * (p.y - 500) < 256) {
           p.x = 0
           p.y = 500
@@ -160,26 +161,27 @@ const GSAPMasterVisualizer = () => {
           p.x = 500
           p.y = 0
         }
-
+        // 2. Bound X movement
         if (p.x < 0) p.x = 0
         if (p.x > 500) p.x = 500
+      },
+      onUpdate: (path: string) => {
+        gsap.set(revealPathRef.current, { attr: { d: path } })
+        refreshPreviewEase()
       },
       onPress: () => tweenRef.current?.pause(),
       onRelease: () => tweenRef.current?.resume(),
     })
 
-    setEaseString(INITIAL_EASE_STRING)
-    setIsInvalid(false)
-
     return () => {
       tweenRef.current?.kill()
       editorRef.current?.kill()
     }
-  }, [])
+  }, [duration, refreshPreviewEase])
 
   return (
-    <div className="flex gap-8 p-10 bg-[#0e100f] min-h-screen text-[#bbbaa6] font-mono select-none">
-      {/* LEFT — picker */}
+    <div className="flex gap-8 p-10 bg-[#0e100f] h-fit text-[#bbbaa6] font-mono select-none">
+      {/* SIDEBAR */}
       <div className="w-1/4 space-y-6">
         <DropDown
           title="Component"
@@ -188,24 +190,15 @@ const GSAPMasterVisualizer = () => {
             setComponent(v as any)
             setProp(null)
           }}
-          placeholder="Pick component"
         />
-
         {component && (
           <DropDown
             title="Animation"
             elements={[...COMPONENTS[component]]}
             onToggle={v => setProp(v)}
-            placeholder="Pick animation"
           />
         )}
-
-        <DropDown
-          title="Presets"
-          elements={Object.keys(PRESETS)}
-          onToggle={handlePresetChange}
-          placeholder="power2.out"
-        />
+        <DropDown title="Presets" elements={Object.keys(PRESETS)} onToggle={handlePresetChange} />
 
         {component && (
           <div className="flex flex-col gap-2">
@@ -214,24 +207,21 @@ const GSAPMasterVisualizer = () => {
               className="py-2 rounded bg-emerald-600 disabled:opacity-40"
               onClick={() => {
                 if (!component || !prop) return
-                ;(updateEase as (g: string, a: string, e: string) => Promise<void>)(
+                ;(saveEaseToStore as (g: string, a: string, e: string) => Promise<void>)(
                   component,
                   prop,
                   easeString,
                 )
-
                 setDirty(false)
               }}
             >
               Save Changes
             </button>
-
             <button
               disabled={!prop}
               className="py-2 rounded bg-zinc-800 disabled:opacity-40"
               onClick={() => {
-                if (!component || !prop) return
-                const def = (DEFAULT_EASES as any)[component][prop]
+                const def = (DEFAULT_EASES as any)[component!][prop!]
                 setEaseString(def)
                 setDirty(true)
               }}
@@ -242,11 +232,11 @@ const GSAPMasterVisualizer = () => {
         )}
       </div>
 
-      {/* MIDDLE — your editor */}
+      {/* EDITOR GRID */}
       <div className="flex-1 space-y-6">
         <div className="relative aspect-square bg-black border border-[#42433d] p-12 overflow-visible shadow-2xl">
           <div className="absolute inset-0 pointer-events-none text-lg uppercase tracking-widest text-[#7c7c6f]">
-            <div className="absolute left-0 top-1/2 -rotate-90 origin-bottom-left">
+            <div className="absolute left-0 top-1/2 -rotate-90 origin-bottom-left whitespace-nowrap px-4">
               value:{" "}
               <span ref={valueTextRef} className="text-[#0ae448]">
                 0
@@ -263,46 +253,35 @@ const GSAPMasterVisualizer = () => {
           <svg className="w-full h-full overflow-visible relative z-10" viewBox="0 0 500 500">
             <g className="opacity-10" stroke="#bbbaa6" strokeWidth="1">
               {[...Array(11)].map((_, i) => (
-                <React.Fragment key={i}>
+                <Fragment key={i}>
                   <line x1={i * 50} x2={i * 50} y1="0" y2="500" />
                   <line x1="0" x2="500" y1={i * 50} y2={i * 50} />
-                </React.Fragment>
+                </Fragment>
               ))}
             </g>
-
             <path
               ref={mainPathRef}
               d={INITIAL_GRID_PATH}
               fill="none"
               stroke="transparent"
-              strokeWidth="24"
+              strokeWidth="28"
               className="cursor-crosshair"
             />
-
             <path
               ref={revealPathRef}
               d={INITIAL_GRID_PATH}
               fill="none"
               stroke={isInvalid ? "#f10c00" : "#0ae448"}
               strokeWidth="3"
-              className="pointer-events-none"
-              style={{
-                filter: isInvalid ? "none" : "drop-shadow(0 0 12px #0ae448)",
-              }}
+              className="pointer-events-none shadow-[0_0_15px_#0ae448]"
             />
-
-            <line x1="500" y1="0" x2="500" y2="500" stroke="#222" strokeWidth="1" opacity="0.5" />
-
             <circle
               ref={jointRef}
               cx="500"
               cy="500"
               r="12"
               fill="#0ae448"
-              opacity={isInvalid ? 0.3 : 1}
-              style={{
-                filter: "drop-shadow(0 0 15px #0ae448)",
-              }}
+              style={{ filter: "drop-shadow(0 0 15px #0ae448)" }}
             />
           </svg>
 
@@ -312,14 +291,12 @@ const GSAPMasterVisualizer = () => {
         </div>
       </div>
 
-      {/* RIGHT — preview */}
-      <div className="w-1/4 flex items-center justify-center">
-        {!component && <div className="opacity-40 text-sm">Pick something to preview</div>}
-
+      {/* PREVIEW PANEL */}
+      <div className="w-1/4 flex items-center justify-center border-l border-[#42433d]/30">
+        {!component && <div className="opacity-40 text-sm">Pick a component to preview</div>}
         {component === "ToggleButton" && <ToggleButton isEnabled={true} onToggle={() => {}} />}
-
         {component === "DropDown" && (
-          <DropDown title="Preview" elements={["One", "Two"]} onToggle={() => {}} />
+          <DropDown title="Preview" elements={["Option 1", "Option 2"]} onToggle={() => {}} />
         )}
       </div>
     </div>
