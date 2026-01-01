@@ -115,39 +115,55 @@ func (ms *MessageStore) GetMessages(jid types.JID) []Message {
 // limit: max number of messages to return
 // Returns messages in chronological order (oldest first within the page)
 func (ms *MessageStore) GetMessagesPaged(jid types.JID, beforeTimestamp int64, limit int) []Message {
-	// Check cache first
-	ml, ok := ms.msgMap.Get(jid)
-	if !ok || len(ml) == 0 {
-		// Cache miss - load all messages from DB and populate cache
-		ml = ms.loadAndCacheAllMessages(jid)
-		if len(ml) == 0 {
-			return []Message{}
-		}
-	}
+	var rows *sql.Rows
+	var err error
 
 	if beforeTimestamp == 0 {
-		// Get latest messages
-		start := len(ml) - limit
-		if start < 0 {
-			start = 0
+		// Get latest messages using the optimized query
+		rows, err = ms.db.Query(query.SelectLatestMessagesByChat, jid.String(), limit)
+	} else {
+		// Get messages before timestamp using the optimized query
+		rows, err = ms.db.Query(query.SelectMessagesByChatBeforeTimestamp, jid.String(), beforeTimestamp, limit)
+	}
+
+	if err != nil {
+		return []Message{}
+	}
+	defer rows.Close()
+
+	var messages []Message
+	for rows.Next() {
+		var (
+			chat  string
+			msgID string
+			ts    int64
+			minf  []byte
+			raw   []byte
+		)
+
+		if err := rows.Scan(&chat, &msgID, &ts, &minf, &raw); err != nil {
+			continue
 		}
-		return ml[start:]
-	}
 
-	// Find messages before the timestamp
-	var result []Message
-	for i := len(ml) - 1; i >= 0 && len(result) < limit; i-- {
-		if ml[i].Info.Timestamp.Unix() < beforeTimestamp {
-			result = append(result, ml[i])
+		var messageInfo types.MessageInfo
+		if err := gobDecode(minf, &messageInfo); err != nil {
+			continue
 		}
+
+		var waMsg *waE2E.Message
+		waMsg, err = unmarshalMessageContent(raw)
+		if err != nil {
+			continue
+		}
+
+		messages = append(messages, Message{
+			Info:    messageInfo,
+			Content: waMsg,
+		})
+		ms.mCache.Set(msgID, 1)
 	}
 
-	// Reverse to get chronological order
-	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
-		result[i], result[j] = result[j], result[i]
-	}
-
-	return result
+	return messages
 }
 
 // loadAndCacheAllMessages loads all messages for a chat from DB and caches them

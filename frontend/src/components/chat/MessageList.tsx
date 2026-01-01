@@ -9,6 +9,7 @@ interface MessageListProps {
   sentMediaCache: React.MutableRefObject<Map<string, string>>
   onReply?: (message: store.Message) => void
   onLoadMore?: () => void
+  onPrefetch?: () => void
   onTrimOldMessages?: () => void
   firstItemIndex: number
   isLoading?: boolean
@@ -23,20 +24,11 @@ export interface MessageListHandle {
 const MemoizedMessageItem = memo(MessageItem)
 
 export const MessageList = forwardRef<MessageListHandle, MessageListProps>(function MessageList(
-  {
-    chatId,
-    messages,
-    sentMediaCache,
-    onReply,
-    onLoadMore,
-    onTrimOldMessages,
-    firstItemIndex,
-    isLoading,
-    hasMore,
-  },
+  { chatId, messages, sentMediaCache, onReply, onLoadMore, onPrefetch, onTrimOldMessages, firstItemIndex, isLoading, hasMore },
   ref,
 ) {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
+  const prefetchTriggeredRef = useRef(false)
 
   const scrollToBottom = useCallback(
     (behavior: "auto" | "smooth" = "smooth") => {
@@ -59,6 +51,8 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
   const handleStartReached = useCallback(() => {
     if (!isLoading && hasMore && onLoadMore) {
       onLoadMore()
+      // Reset prefetch trigger when loading more
+      prefetchTriggeredRef.current = false
     }
   }, [isLoading, hasMore, onLoadMore])
 
@@ -68,6 +62,29 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
       onTrimOldMessages()
     }
   }, [onTrimOldMessages, messages.length])
+
+  // Handle scroll position changes for prefetching at 80% from top
+  const handleRangeChanged = useCallback(
+    (range: { startIndex: number; endIndex: number }) => {
+      if (!hasMore || isLoading || !onPrefetch || prefetchTriggeredRef.current) {
+        return
+      }
+
+      const totalItems = messages.length
+      if (totalItems === 0) return
+
+      // Calculate scroll percentage from top
+      // When startIndex is close to 0, we're near the top
+      const scrollPercentage = (totalItems - range.startIndex) / totalItems
+
+      // Trigger prefetch when scrolled 80% from top (20% from bottom of loaded messages)
+      if (scrollPercentage >= 0.8) {
+        prefetchTriggeredRef.current = true
+        onPrefetch()
+      }
+    },
+    [hasMore, isLoading, onPrefetch, messages.length],
+  )
 
   // Loading indicator component
   const LoadingHeader = useCallback(
@@ -96,6 +113,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
       initialTopMostItemIndex={messages.length - 1}
       startReached={handleStartReached}
       endReached={handleEndReached}
+      rangeChanged={handleRangeChanged}
       followOutput="smooth"
       alignToBottom
       increaseViewportBy={{ top: 200, bottom: 0 }}

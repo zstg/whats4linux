@@ -31,6 +31,7 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
   const [firstItemIndex, setFirstItemIndex] = useState(START_INDEX)
   const [hasMore, setHasMore] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [isPrefetching, setIsPrefetching] = useState(false)
   const [initialLoad, setInitialLoad] = useState(true)
 
   const messageListRef = useRef<MessageListHandle>(null)
@@ -89,6 +90,37 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
       .catch(console.error)
       .finally(() => setIsLoadingMore(false))
   }, [chatId, hasMore, isLoadingMore, messages, prependMessages])
+
+  const handlePrefetch = useCallback(() => {
+    // Don't prefetch if already loading or no more messages
+    if (!hasMore || isLoadingMore || isPrefetching) return
+
+    const currentMessages = messages[chatId] || []
+    if (currentMessages.length === 0) return
+
+    setIsPrefetching(true)
+    const oldestMessage = currentMessages[0]
+
+    // Convert ISO string to unix timestamp (seconds)
+    const beforeTimestamp = oldestMessage
+      ? Math.floor(new Date(oldestMessage.Info.Timestamp).getTime() / 1000)
+      : 0
+
+    // Prefetch next batch of messages silently
+    FetchMessagesPaged(chatId, 50, beforeTimestamp)
+      .then((msgs: store.Message[]) => {
+        if (msgs && msgs.length > 0) {
+          // Silently prepend messages without changing scroll position
+          prependMessages(chatId, msgs)
+          setFirstItemIndex(prev => prev - msgs.length)
+          setHasMore(msgs.length >= 50)
+        } else {
+          setHasMore(false)
+        }
+      })
+      .catch(console.error)
+      .finally(() => setIsPrefetching(false))
+  }, [chatId, hasMore, isLoadingMore, isPrefetching, messages, prependMessages])
 
   const handleTrimOldMessages = useCallback(() => {
     const currentMessages = messages[chatId] || []
@@ -316,6 +348,7 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
         sentMediaCache={sentMediaCache}
         onReply={setReplyingTo}
         onLoadMore={loadMoreMessages}
+        onPrefetch={handlePrefetch}
         onTrimOldMessages={handleTrimOldMessages}
         firstItemIndex={firstItemIndex}
         isLoading={isLoadingMore || initialLoad}
