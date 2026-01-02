@@ -92,8 +92,34 @@ func (ms *MessageStore) ProcessMessageEvent(msg *events.Message) {
 	ml = append(ml, m)
 	ms.msgMap.Set(chat, ml)
 
-	// Invalidate specific chat in chatListMap
-	ms.chatListMap.Delete(chat)
+	// Update chatListMap with the new latest message
+	var messageText string
+	if m.Content.GetConversation() != "" {
+		messageText = m.Content.GetConversation()
+	} else if m.Content.GetExtendedTextMessage() != nil {
+		messageText = m.Content.GetExtendedTextMessage().GetText()
+	} else {
+		switch {
+		case m.Content.GetImageMessage() != nil:
+			messageText = "image"
+		case m.Content.GetVideoMessage() != nil:
+			messageText = "video"
+		case m.Content.GetAudioMessage() != nil:
+			messageText = "audio"
+		case m.Content.GetDocumentMessage() != nil:
+			messageText = "document"
+		case m.Content.GetStickerMessage() != nil:
+			messageText = "sticker"
+		default:
+			messageText = "unsupported message type"
+		}
+	}
+	chatMsg := ChatMessage{
+		JID:         msg.Info.Chat,
+		MessageText: messageText,
+		MessageTime: msg.Info.Timestamp.Unix(),
+	}
+	ms.chatListMap.Set(chat, chatMsg)
 
 	err := ms.insertMessageToDB(&m)
 	if err != nil {
@@ -206,6 +232,40 @@ func (ms *MessageStore) GetMessage(chatJID types.JID, messageID string) *Message
 		}
 	}
 	return nil
+}
+
+// GetMessageByID searches for a message by ID across all chats
+func (ms *MessageStore) GetMessageByID(messageID string) *Message {
+	// Check in-memory cache first
+	for _, msgs := range ms.msgMap.GetAll() {
+		for _, msg := range msgs {
+			if msg.Info.ID == messageID {
+				return &msg
+			}
+		}
+	}
+	
+	// Query database
+	var chat, msgID string
+	var ts int64
+	var minf, raw []byte
+	
+	err := ms.db.QueryRow(`SELECT chat, message_id, timestamp, msg_info, raw_message FROM messages WHERE message_id = ? LIMIT 1`, messageID).Scan(&chat, &msgID, &ts, &minf, &raw)
+	if err != nil {
+		return nil
+	}
+	
+	var messageInfo types.MessageInfo
+	if err := gobDecode(minf, &messageInfo); err != nil {
+		return nil
+	}
+	
+	waMsg, err := unmarshalMessageContent(raw)
+	if err != nil {
+		return nil
+	}
+	
+	return &Message{Info: messageInfo, Content: waMsg}
 }
 
 type ChatMessage struct {
