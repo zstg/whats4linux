@@ -7,6 +7,9 @@ import { MessageList, type MessageListHandle } from "../components/chat/MessageL
 import { ChatHeader } from "../components/chat/ChatHeader"
 import { ChatInput } from "../components/chat/ChatInput"
 import clsx from "clsx"
+import gsap from "gsap"
+import { useGSAP } from "@gsap/react"
+import { getEase } from "../store/useEaseStore"
 
 interface ChatDetailProps {
   chatId: string
@@ -43,8 +46,17 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
   const fileInputRef = useRef<HTMLInputElement>(null)
   const emojiPickerRef = useRef<HTMLDivElement>(null)
   const emojiButtonRef = useRef<HTMLButtonElement>(null)
+  const scrollButtonRef = useRef<HTMLButtonElement>(null)
   const sentMediaCache = useRef<Map<string, string>>(new Map())
   const isComposingRef = useRef(false)
+
+  const easeShowRef = useRef(getEase("DropDown", "open"))
+  const easeHideRef = useRef(getEase("DropDown", "close"))
+
+  useEffect(() => {
+    easeShowRef.current = getEase("DropDown", "open")
+    easeHideRef.current = getEase("DropDown", "close")
+  })
 
   const scrollToBottom = useCallback((instant = false) => {
     requestAnimationFrame(() => {
@@ -180,6 +192,25 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
 
     return () => unsub()
   }, [chatId, updateMessage, scrollToBottom])
+
+  useGSAP(() => {
+    if (!scrollButtonRef.current) return
+
+    if (isAtBottom) {
+      gsap.to(scrollButtonRef.current, {
+        opacity: 0,
+        duration: 0.3,
+        ease: easeHideRef.current,
+      })
+    } else {
+      gsap.to(scrollButtonRef.current, {
+        opacity: 1,
+        duration: 0.3,
+        ease: easeShowRef.current,
+      })
+    }
+  }, [isAtBottom])
+
   return (
     <div className="flex flex-col h-full bg-[#efeae2] dark:bg-[#0b141a]">
       <ChatHeader chatName={chatName} chatAvatar={chatAvatar} onBack={onBack} />
@@ -191,21 +222,20 @@ export function ChatDetail({ chatId, chatName, chatAvatar, onBack }: ChatDetailP
           </div>
         )}
 
-        {!isAtBottom && (
-          <button
-            onClick={() => scrollToBottom(false)}
-            className="absolute bottom-4 right-8 bg-white dark:bg-received-bubble-dark-bg p-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 z-100 hover:bg-gray-100 dark:hover:bg-[#2a3942] transition-all"
+        <button
+          ref={scrollButtonRef}
+          onClick={() => scrollToBottom(false)}
+          className="absolute bottom-4 right-8 bg-white dark:bg-received-bubble-dark-bg p-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 z-100 hover:bg-gray-100 dark:hover:bg-[#2a3942]"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="24"
+            height="24"
+            className="fill-current text-gray-600 dark:text-gray-400"
           >
-            <svg
-              viewBox="0 0 24 24"
-              width="24"
-              height="24"
-              className="fill-current text-gray-600 dark:text-gray-400"
-            >
-              <path d="M12 16.17L4.83 9L3.41 10.41L12 19L20.59 10.41L19.17 9L12 16.17Z" />
-            </svg>
-          </button>
-        )}
+            <path d="M12 16.17L4.83 9L3.41 10.41L12 19L20.59 10.41L19.17 9L12 16.17Z" />
+          </svg>
+        </button>
 
         <div className={clsx("h-full", (!isReady || initialLoad) && "invisible")}>
           <MessageList
