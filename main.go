@@ -11,7 +11,6 @@ import (
 	apiPkg "github.com/lugvitc/whats4linux/api"
 	"github.com/lugvitc/whats4linux/internal/misc"
 	"github.com/lugvitc/whats4linux/internal/store"
-	"github.com/lugvitc/whats4linux/internal/utils/lockfile"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -55,8 +54,6 @@ func (h *FileLoader) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	lock := lockfile.EnsureSingleInstance(misc.APP_LOCK_FILE)
-	defer lock.Release()
 
 	store.LoadSettings()
 	defer store.CloseSettings()
@@ -75,6 +72,10 @@ func main() {
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        api.Startup,
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId:               misc.APP_ID,
+			OnSecondInstanceLaunch: api.OnSecondInstanceLaunch,
+		},
 		Bind: []any{
 			api,
 		},

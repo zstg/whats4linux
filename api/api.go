@@ -19,6 +19,7 @@ import (
 	"github.com/lugvitc/whats4linux/internal/store"
 	"github.com/lugvitc/whats4linux/internal/wa"
 	"github.com/nyaruka/phonenumbers"
+	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
@@ -62,6 +63,11 @@ type Api struct {
 // NewApi creates a new Api application struct
 func New() *Api {
 	return &Api{}
+}
+
+func (a *Api) OnSecondInstanceLaunch(secondInstanceData options.SecondInstanceData) {
+	runtime.WindowUnminimise(a.ctx)
+	runtime.Show(a.ctx)
 }
 
 // startup is called when the app starts. The context is saved
