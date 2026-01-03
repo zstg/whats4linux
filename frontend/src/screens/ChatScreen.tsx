@@ -359,9 +359,8 @@ export function ChatListScreen({ onOpenSettings }: ChatListScreenProps) {
         }
       },
     )
-    
+
     const unsubPictureUpdate = EventsOn("wa:picture_update", async (jid: string) => {
-      
       if (!jid) return
 
       try {
