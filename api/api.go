@@ -724,6 +724,7 @@ func (a *Api) mainEventHandler(evt any) {
 		a.cw.Initialise(a.waClient)
 		a.waClient.SendPresence(a.ctx, types.PresenceAvailable)
 
+	case *events.AppStateSyncComplete:
 		// Run migration
 		a.messageStore.MigrateLIDToPN(a.ctx, a.waClient.Store.LIDs)
 	case *events.Disconnected:
