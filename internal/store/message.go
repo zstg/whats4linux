@@ -95,7 +95,6 @@ func ExtractMessageText(msg *waE2E.Message) string {
 	}
 }
 
-
 func NewMessageStore() (*MessageStore, error) {
 	db, err := sql.Open("sqlite3", misc.GetSQLiteAddress("mdb"))
 	if err != nil {
@@ -261,7 +260,7 @@ func getMessageArrayFromRows(rows *sql.Rows) []Message {
 
 		var waMsg *waE2E.Message
 		waMsg, err := unmarshalMessageContent(raw)
-		
+
 		if err != nil {
 			continue
 		}
@@ -602,7 +601,7 @@ func InsertMessage(msg *Message) error {
 		targetID := reactionMsg.GetKey().GetID()
 		reaction := reactionMsg.GetText()
 		senderJID := msg.Info.Sender.String()
-		
+
 		return AddReactionToMessage(targetID, reaction, senderJID)
 	}
 
@@ -724,18 +723,18 @@ func GetMessage(messageID string) (*Message, error) {
 	defer db.Close()
 
 	var (
-		id                string
-		chatJID           string
-		senderJID         string
-		timestamp         int64
-		isFromMe          bool
-		msgType           uint8
-		text              string
-		mediaType         string
-		replyToMessageID  string
-		mentions          string
-		edited            bool
-		reactions         string
+		id               string
+		chatJID          string
+		senderJID        string
+		timestamp        int64
+		isFromMe         bool
+		msgType          uint8
+		text             string
+		mediaType        string
+		replyToMessageID string
+		mentions         string
+		edited           bool
+		reactions        string
 	)
 
 	err = db.QueryRow(query.SelectDecodedMessageByID, messageID).Scan(
