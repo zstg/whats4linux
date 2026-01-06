@@ -59,6 +59,18 @@ func (ms *MessageStore) runWriter() {
 	}
 }
 
+func (ms *MessageStore) runSync(job writeJob) error {
+	done := make(chan error, 1)
+
+	ms.writeCh <- func(tx *sql.Tx) error {
+		err := job(tx)
+		done <- err
+		return err
+	}
+
+	return <-done
+}
+
 // ExtractMessageText extracts a text representation from a WhatsApp message
 func ExtractMessageText(msg *waE2E.Message) string {
 	if msg.GetConversation() != "" {
@@ -118,33 +130,26 @@ func NewMessageStore() (*MessageStore, error) {
 
 	go ms.runWriter()
 
-	done := make(chan error, 1)
-
-	ms.writeCh <- func(tx *sql.Tx) error {
+	err = ms.runSync(func(tx *sql.Tx) error {
 		_, err := tx.Exec(query.CreateSchema)
-		done <- err
 		return err
-	}
+	})
 
-	if err := <-done; err != nil {
+	if err != nil {
 		return nil, err
 	}
 
-	done = make(chan error, 1)
-
-	ms.writeCh <- func(tx *sql.Tx) error {
+	err = ms.runSync(func(tx *sql.Tx) error {
 		var err error
 		ms.stmtInsert, err = tx.Prepare(query.InsertMessage)
 		if err != nil {
-			done <- err
 			return err
 		}
 		ms.stmtUpdate, err = tx.Prepare(query.UpdateMessage)
-		done <- err
 		return err
-	}
+	})
 
-	if err := <-done; err != nil {
+	if err != nil {
 		return nil, err
 	}
 
@@ -471,8 +476,12 @@ func (ms *MessageStore) updateMessageInDB(msg *Message) error {
 	return nil
 }
 
-func (ms *MessageStore) MigrateLIDToPN(ctx context.Context, sd store.LIDStore) {
-	ms.writeCh <- func(tx *sql.Tx) error {
+func (ms *MessageStore) MigrateLIDToPN(ctx context.Context, sd store.LIDStore) error {
+	log.Println("Starting LID to PN migration for messages...")
+
+	return ms.runSync(func(tx *sql.Tx) error {
+		log.Println("Fetching all messages for migration...")
+		defer log.Println("Migration task completed.")
 		rows, err := tx.Query(query.SelectAllMessagesInfo)
 		if err != nil {
 			return err
@@ -487,13 +496,14 @@ func (ms *MessageStore) MigrateLIDToPN(ctx context.Context, sd store.LIDStore) {
 
 		var (
 			minf   []byte
+			chat   string
 			oC, oS string
 		)
 
 		for rows.Next() {
 			minf = minf[:0]
 
-			if err := rows.Scan(&minf); err != nil {
+			if err := rows.Scan(&chat, &minf); err != nil {
 				continue
 			}
 
@@ -502,6 +512,9 @@ func (ms *MessageStore) MigrateLIDToPN(ctx context.Context, sd store.LIDStore) {
 				log.Println("Failed to decode message info during LID to PN migration:", err)
 				continue
 			}
+
+			chatJid, _ := types.ParseJID(chat)
+			messageInfo.Chat = chatJid
 
 			oC = messageInfo.Chat.String()
 			oS = messageInfo.Sender.String()
@@ -520,6 +533,7 @@ func (ms *MessageStore) MigrateLIDToPN(ctx context.Context, sd store.LIDStore) {
 			}
 
 			_, err = stmtUpdate.Exec(
+				messageInfo.Chat.String(),
 				msgInfo,
 				messageInfo.ID,
 			)
@@ -539,7 +553,7 @@ func (ms *MessageStore) MigrateLIDToPN(ctx context.Context, sd store.LIDStore) {
 			}
 		}
 		return nil
-	}
+	})
 }
 
 func marshalMessageContent(msg *waE2E.Message) ([]byte, error) {
