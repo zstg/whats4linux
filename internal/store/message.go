@@ -1001,13 +1001,13 @@ type DecodedMessageInfo struct {
 
 // DecodedMessageContent provides minimal content info for frontend rendering
 type DecodedMessageContent struct {
-	Conversation        string                   `json:"conversation,omitempty"`
-	ExtendedTextMessage *ExtendedTextContent     `json:"extendedTextMessage,omitempty"`
-	ImageMessage        *MediaMessageContent     `json:"imageMessage,omitempty"`
-	VideoMessage        *MediaMessageContent     `json:"videoMessage,omitempty"`
-	AudioMessage        *MediaMessageContent     `json:"audioMessage,omitempty"`
-	DocumentMessage     *DocumentMessageContent  `json:"documentMessage,omitempty"`
-	StickerMessage      *MediaMessageContent     `json:"stickerMessage,omitempty"`
+	Conversation        string                  `json:"conversation,omitempty"`
+	ExtendedTextMessage *ExtendedTextContent    `json:"extendedTextMessage,omitempty"`
+	ImageMessage        *MediaMessageContent    `json:"imageMessage,omitempty"`
+	VideoMessage        *MediaMessageContent    `json:"videoMessage,omitempty"`
+	AudioMessage        *MediaMessageContent    `json:"audioMessage,omitempty"`
+	DocumentMessage     *DocumentMessageContent `json:"documentMessage,omitempty"`
+	StickerMessage      *MediaMessageContent    `json:"stickerMessage,omitempty"`
 }
 
 type ExtendedTextContent struct {
