@@ -37,11 +37,86 @@ type ChatMessage struct {
 	Sender      string
 }
 
-// chatListCache is an in-memory cache for the chat list
-var chatListCache = misc.NewVMap[string, ChatMessage]()
+type writeJob func(*sql.Tx) error
 
-// messageIDCache tracks processed message IDs to avoid duplicate processing
-var messageIDCache = misc.NewVMap[string, uint8]()
+type MessageStore struct {
+	db *sql.DB
+
+	// [chatJID.User] = ChatMessage
+	chatListMap misc.VMap[string, ChatMessage]
+	mCache      misc.VMap[string, uint8]
+
+	stmtInsert *sql.Stmt
+	stmtUpdate *sql.Stmt
+
+	writeCh chan writeJob
+}
+
+func NewMessageStore() (*MessageStore, error) {
+	db, err := openDB()
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := db.Exec(query.CreateMessagesTable); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	stmtInsert, err := db.Prepare(query.InsertDecodedMessage)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	stmtUpdate, err := db.Prepare(query.UpdateDecodedMessage)
+	if err != nil {
+		stmtInsert.Close()
+		db.Close()
+		return nil, err
+	}
+
+	ms := &MessageStore{
+		db:          db,
+		chatListMap: misc.NewVMap[string, ChatMessage](),
+		mCache:      misc.NewVMap[string, uint8](),
+		stmtInsert:  stmtInsert,
+		stmtUpdate:  stmtUpdate,
+		writeCh:     make(chan writeJob, 100),
+	}
+
+	go ms.runWriter()
+
+	return ms, nil
+}
+
+func (ms *MessageStore) runWriter() {
+	for job := range ms.writeCh {
+		tx, err := ms.db.Begin()
+		if err != nil {
+			continue
+		}
+
+		if err := job(tx); err != nil {
+			tx.Rollback()
+			continue
+		}
+
+		tx.Commit()
+	}
+}
+
+func (ms *MessageStore) runSync(job writeJob) error {
+	done := make(chan error, 1)
+
+	ms.writeCh <- func(tx *sql.Tx) error {
+		err := job(tx)
+		done <- err
+		return err
+	}
+
+	return <-done
+}
 
 // openDB opens a connection to messages.db
 func openDB() (*sql.DB, error) {
@@ -65,18 +140,6 @@ func openDB() (*sql.DB, error) {
 	}
 
 	return db, nil
-}
-
-// InitMessagesDB initializes the messages.db database
-func InitMessagesDB() error {
-	db, err := openDB()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	_, err = db.Exec(query.CreateMessagesTable)
-	return err
 }
 
 // ExtractMessageText extracts a text representation from a WhatsApp message
@@ -121,7 +184,7 @@ func updateCanonicalJID(ctx context.Context, js store.LIDStore, jid *types.JID) 
 }
 
 // ProcessMessageEvent processes a new message event and stores it in messages.db
-func ProcessMessageEvent(ctx context.Context, sd store.LIDStore, msg *events.Message) {
+func (ms *MessageStore) ProcessMessageEvent(ctx context.Context, sd store.LIDStore, msg *events.Message) {
 	updateCanonicalJID(ctx, sd, &msg.Info.Chat)
 	updateCanonicalJID(ctx, sd, &msg.Info.Sender)
 
@@ -133,7 +196,7 @@ func ProcessMessageEvent(ctx context.Context, sd store.LIDStore, msg *events.Mes
 			return
 		}
 
-		err := UpdateMessageContent(targetID, newContent)
+		err := ms.UpdateMessageContent(targetID, newContent)
 		if err != nil {
 			log.Println("Failed to update edited message:", err)
 		}
@@ -148,7 +211,7 @@ func ProcessMessageEvent(ctx context.Context, sd store.LIDStore, msg *events.Mes
 		Edited:  false,
 	}
 
-	// Update chatListCache with the new latest message
+	// Update chatListMap with the new latest message
 	messageText := ExtractMessageText(m.Content)
 	sender := msg.Info.PushName
 	if sender == "" && msg.Info.Sender.User != "" {
@@ -165,33 +228,27 @@ func ProcessMessageEvent(ctx context.Context, sd store.LIDStore, msg *events.Mes
 		MessageTime: msg.Info.Timestamp.Unix(),
 		Sender:      sender,
 	}
-	chatListCache.Set(chat, chatMsg)
+	ms.chatListMap.Set(chat, chatMsg)
 
 	// Check if message already processed
-	if _, exists := messageIDCache.Get(msg.Info.ID); exists {
+	if _, exists := ms.mCache.Get(msg.Info.ID); exists {
 		// Update existing message
-		err := UpdateMessageContent(msg.Info.ID, m.Content)
+		err := ms.UpdateMessageContent(msg.Info.ID, m.Content)
 		if err != nil {
 			log.Println("Failed to update message:", err)
 		}
 		return
 	}
 
-	messageIDCache.Set(msg.Info.ID, 1)
-	err := InsertMessage(&m)
+	ms.mCache.Set(msg.Info.ID, 1)
+	err := ms.InsertMessage(&m)
 	if err != nil {
 		log.Println("Failed to insert message:", err)
 	}
 }
 
 // InsertMessage inserts a new message into messages.db
-func InsertMessage(msg *Message) error {
-	db, err := openDB()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
+func (ms *MessageStore) InsertMessage(msg *Message) error {
 	// Handle reaction messages differently
 	if msg.Content.GetReactionMessage() != nil {
 		reactionMsg := msg.Content.GetReactionMessage()
@@ -199,7 +256,7 @@ func InsertMessage(msg *Message) error {
 		reaction := reactionMsg.GetText()
 		senderJID := msg.Info.Sender.String()
 
-		return AddReactionToMessage(targetID, reaction, senderJID)
+		return ms.AddReactionToMessage(targetID, reaction, senderJID)
 	}
 
 	var msgType query.MessageType = query.MessageTypeText
@@ -308,31 +365,26 @@ func InsertMessage(msg *Message) error {
 		}
 	}
 
-	_, err = db.Exec(query.InsertDecodedMessage,
-		msg.Info.ID,
-		msg.Info.Chat.String(),
-		msg.Info.Sender.String(),
-		msg.Info.Timestamp.Unix(),
-		msg.Info.IsFromMe,
-		msgType,
-		text,
-		mediaType,
-		replyToMessageID,
-		mentions,
-		msg.Edited,
-	)
-
-	return err
+	return ms.runSync(func(tx *sql.Tx) error {
+		_, err := tx.Stmt(ms.stmtInsert).Exec(
+			msg.Info.ID,
+			msg.Info.Chat.String(),
+			msg.Info.Sender.String(),
+			msg.Info.Timestamp.Unix(),
+			msg.Info.IsFromMe,
+			msgType,
+			text,
+			mediaType,
+			replyToMessageID,
+			mentions,
+			msg.Edited,
+		)
+		return err
+	})
 }
 
 // UpdateMessageContent updates an existing message's content
-func UpdateMessageContent(messageID string, content *waE2E.Message) error {
-	db, err := openDB()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
+func (ms *MessageStore) UpdateMessageContent(messageID string, content *waE2E.Message) error {
 	var msgType query.MessageType = query.MessageTypeText
 	var text string
 
@@ -371,23 +423,18 @@ func UpdateMessageContent(messageID string, content *waE2E.Message) error {
 		}
 	}
 
-	_, err = db.Exec(query.UpdateDecodedMessage,
-		text,
-		msgType,
-		messageID,
-	)
-
-	return err
+	return ms.runSync(func(tx *sql.Tx) error {
+		_, err := tx.Stmt(ms.stmtUpdate).Exec(
+			text,
+			msgType,
+			messageID,
+		)
+		return err
+	})
 }
 
 // GetMessageWithRaw returns a message with its raw protobuf content for media download
-func GetMessageWithRaw(chatJID string, messageID string) (*Message, error) {
-	db, err := openDB()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
+func (ms *MessageStore) GetMessageWithRaw(chatJID string, messageID string) (*Message, error) {
 	var (
 		id        string
 		chat      string
@@ -402,7 +449,7 @@ func GetMessageWithRaw(chatJID string, messageID string) (*Message, error) {
 		edited    bool
 	)
 
-	err = db.QueryRow(query.SelectMessageWithRawByChatAndID, chatJID, messageID).Scan(
+	err := ms.db.QueryRow(query.SelectMessageWithRawByChatAndID, chatJID, messageID).Scan(
 		&id,
 		&chat,
 		&sender,
@@ -443,13 +490,7 @@ func GetMessageWithRaw(chatJID string, messageID string) (*Message, error) {
 }
 
 // GetMessageByIDWithRaw returns a message by ID with its raw protobuf content
-func GetMessageByIDWithRaw(messageID string) (*Message, error) {
-	db, err := openDB()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
+func (ms *MessageStore) GetMessageByIDWithRaw(messageID string) (*Message, error) {
 	var (
 		id        string
 		chat      string
@@ -464,7 +505,7 @@ func GetMessageByIDWithRaw(messageID string) (*Message, error) {
 		edited    bool
 	)
 
-	err = db.QueryRow(query.SelectMessageWithRawByID, messageID).Scan(
+	err := ms.db.QueryRow(query.SelectMessageWithRawByID, messageID).Scan(
 		&id,
 		&chat,
 		&sender,
@@ -505,14 +546,8 @@ func GetMessageByIDWithRaw(messageID string) (*Message, error) {
 }
 
 // GetChatList returns the chat list from messages.db
-func GetChatList() []ChatMessage {
-	db, err := openDB()
-	if err != nil {
-		return []ChatMessage{}
-	}
-	defer db.Close()
-
-	rows, err := db.Query(query.SelectDecodedChatList)
+func (ms *MessageStore) GetChatList() []ChatMessage {
+	rows, err := ms.db.Query(query.SelectDecodedChatList)
 	if err != nil {
 		return []ChatMessage{}
 	}
@@ -557,7 +592,7 @@ func GetChatList() []ChatMessage {
 		}
 
 		// Check per-chat cache first
-		if cachedChat, ok := chatListCache.Get(jid.User); ok {
+		if cachedChat, ok := ms.chatListMap.Get(jid.User); ok {
 			chatList = append(chatList, cachedChat)
 			continue
 		}
@@ -581,7 +616,7 @@ func GetChatList() []ChatMessage {
 		}
 
 		// Cache per-chat entry
-		chatListCache.Set(jid.User, chatMsg)
+		ms.chatListMap.Set(jid.User, chatMsg)
 		chatList = append(chatList, chatMsg)
 	}
 
@@ -589,25 +624,19 @@ func GetChatList() []ChatMessage {
 }
 
 // MigrateLIDToPNForMessagesDB migrates LID JIDs to PN JIDs in messages.db
-func MigrateLIDToPNForMessagesDB(ctx context.Context, sd store.LIDStore) error {
+func (ms *MessageStore) MigrateLIDToPNForMessagesDB(ctx context.Context, sd store.LIDStore) error {
 	log.Println("Starting LID to PN migration for messages.db...")
-
-	db, err := openDB()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
 
 	log.Println("Fetching all messages for migration...")
 	defer log.Println("Migration task completed.")
 
-	rows, err := db.Query(query.SelectAllMessagesJIDs)
+	rows, err := ms.db.Query(query.SelectAllMessagesJIDs)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
-	stmtUpdate, err := db.Prepare(query.UpdateMessageJIDs)
+	stmtUpdate, err := ms.db.Prepare(query.UpdateMessageJIDs)
 	if err != nil {
 		return err
 	}
@@ -671,14 +700,8 @@ func MigrateLIDToPNForMessagesDB(ctx context.Context, sd store.LIDStore) error {
 }
 
 // GetReactionsByMessageID returns all reactions for a message
-func GetReactionsByMessageID(messageID string) ([]Reaction, error) {
-	db, err := openDB()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
-	rows, err := db.Query(query.SelectReactionsByMessageID, messageID)
+func (ms *MessageStore) GetReactionsByMessageID(messageID string) ([]Reaction, error) {
+	rows, err := ms.db.Query(query.SelectReactionsByMessageID, messageID)
 	if err != nil {
 		return nil, err
 	}
@@ -698,40 +721,26 @@ func GetReactionsByMessageID(messageID string) ([]Reaction, error) {
 }
 
 // AddReactionToMessage adds or removes a reaction to/from a message
-func AddReactionToMessage(targetID, reaction, senderJID string) error {
-	db, err := openDB()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
+func (ms *MessageStore) AddReactionToMessage(targetID, reaction, senderJID string) error {
 	// If reaction is empty, remove all reactions from this sender for this message
 	if reaction == "" {
-		_, err = db.Exec(`DELETE FROM reactions WHERE message_id = ? AND sender_id = ?`, targetID, senderJID)
-		return err
+		return ms.runSync(func(tx *sql.Tx) error {
+			_, err := tx.Exec(`DELETE FROM reactions WHERE message_id = ? AND sender_id = ?`, targetID, senderJID)
+			return err
+		})
 	}
 
-	// Start a transaction
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+	return ms.runSync(func(tx *sql.Tx) error {
+		// Delete any existing reaction from this sender for this message
+		_, err := tx.Exec(`DELETE FROM reactions WHERE message_id = ? AND sender_id = ?`, targetID, senderJID)
+		if err != nil {
+			return err
+		}
 
-	// Delete any existing reaction from this sender for this message
-	_, err = tx.Exec(`DELETE FROM reactions WHERE message_id = ? AND sender_id = ?`, targetID, senderJID)
-	if err != nil {
+		// Insert the new reaction
+		_, err = tx.Exec(query.InsertReaction, targetID, senderJID, reaction)
 		return err
-	}
-
-	// Insert the new reaction
-	_, err = tx.Exec(query.InsertReaction, targetID, senderJID, reaction)
-	if err != nil {
-		return err
-	}
-
-	// Commit the transaction
-	return tx.Commit()
+	})
 }
 
 // DecodedMessage represents a message from messages.db with decoded fields
@@ -800,19 +809,14 @@ type ContextInfo struct {
 }
 
 // GetDecodedMessagesPaged returns a page of decoded messages from messages.db
-func GetDecodedMessagesPaged(chatJID string, beforeTimestamp int64, limit int) ([]DecodedMessage, error) {
-	db, err := openDB()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
+func (ms *MessageStore) GetDecodedMessagesPaged(chatJID string, beforeTimestamp int64, limit int) ([]DecodedMessage, error) {
 	var rows *sql.Rows
+	var err error
 
 	if beforeTimestamp == 0 {
-		rows, err = db.Query(query.SelectLatestDecodedMessagesByChat, chatJID, limit)
+		rows, err = ms.db.Query(query.SelectLatestDecodedMessagesByChat, chatJID, limit)
 	} else {
-		rows, err = db.Query(query.SelectDecodedMessagesByChatBeforeTimestamp, chatJID, beforeTimestamp, limit)
+		rows, err = ms.db.Query(query.SelectDecodedMessagesByChatBeforeTimestamp, chatJID, beforeTimestamp, limit)
 	}
 
 	if err != nil {
@@ -861,7 +865,7 @@ func GetDecodedMessagesPaged(chatJID string, beforeTimestamp int64, limit int) (
 		}
 
 		// Load reactions for this message
-		reactions, err := GetReactionsByMessageID(msg.MessageID)
+		reactions, err := ms.GetReactionsByMessageID(msg.MessageID)
 		if err == nil {
 			msg.Reactions = reactions
 		}
@@ -939,20 +943,14 @@ func buildDecodedContent(msg *DecodedMessage) *DecodedMessageContent {
 }
 
 // GetDecodedMessage returns a single decoded message from messages.db
-func GetDecodedMessage(chatJID string, messageID string) (*DecodedMessage, error) {
-	db, err := openDB()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
+func (ms *MessageStore) GetDecodedMessage(chatJID string, messageID string) (*DecodedMessage, error) {
 	var msg DecodedMessage
 	var mediaType sql.NullInt64
 	var replyTo sql.NullString
 	var mentions sql.NullString
 	var text sql.NullString
 
-	err = db.QueryRow(query.SelectDecodedMessageByChatAndID, chatJID, messageID).Scan(
+	err := ms.db.QueryRow(query.SelectDecodedMessageByChatAndID, chatJID, messageID).Scan(
 		&msg.MessageID,
 		&msg.ChatJID,
 		&msg.SenderJID,
@@ -984,7 +982,7 @@ func GetDecodedMessage(chatJID string, messageID string) (*DecodedMessage, error
 	}
 
 	// Load reactions
-	reactions, err := GetReactionsByMessageID(msg.MessageID)
+	reactions, err := ms.GetReactionsByMessageID(msg.MessageID)
 	if err == nil {
 		msg.Reactions = reactions
 	}
@@ -1006,14 +1004,8 @@ func GetDecodedMessage(chatJID string, messageID string) (*DecodedMessage, error
 }
 
 // GetDecodedChatList returns the chat list from messages.db with the latest message for each chat
-func GetDecodedChatList() ([]DecodedMessage, error) {
-	db, err := openDB()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
-	rows, err := db.Query(query.SelectDecodedChatList)
+func (ms *MessageStore) GetDecodedChatList() ([]DecodedMessage, error) {
+	rows, err := ms.db.Query(query.SelectDecodedChatList)
 	if err != nil {
 		return nil, err
 	}

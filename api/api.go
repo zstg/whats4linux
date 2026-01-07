@@ -58,10 +58,11 @@ type MessageContent struct {
 
 // Api struct
 type Api struct {
-	ctx        context.Context
-	cw         *wa.AppDatabase
-	waClient   *whatsmeow.Client
-	imageCache *cache.ImageCache
+	ctx          context.Context
+	cw           *wa.AppDatabase
+	waClient     *whatsmeow.Client
+	messageStore *store.MessageStore
+	imageCache   *cache.ImageCache
 }
 
 // NewApi creates a new Api application struct
@@ -94,7 +95,7 @@ func (a *Api) Startup(ctx context.Context) {
 		panic(err)
 	}
 	a.waClient = wa.NewClient(ctx, container)
-	err = store.InitMessagesDB()
+	a.messageStore, err = store.NewMessageStore()
 	if err != nil {
 		panic(err)
 	}
@@ -203,7 +204,7 @@ func (a *Api) FetchContacts() ([]Contact, error) {
 }
 
 func (a *Api) FetchMessagesPaged(jid string, limit int, beforeTimestamp int64) ([]store.DecodedMessage, error) {
-	messages, err := store.GetDecodedMessagesPaged(jid, beforeTimestamp, limit)
+	messages, err := a.messageStore.GetDecodedMessagesPaged(jid, beforeTimestamp, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +212,7 @@ func (a *Api) FetchMessagesPaged(jid string, limit int, beforeTimestamp int64) (
 }
 
 func (a *Api) DownloadMedia(chatJID string, messageID string) (string, error) {
-	msg, err := store.GetMessageWithRaw(chatJID, messageID)
+	msg, err := a.messageStore.GetMessageWithRaw(chatJID, messageID)
 	if err != nil || msg == nil {
 		return "", fmt.Errorf("message not found")
 	}
@@ -268,7 +269,7 @@ func (a *Api) DownloadMedia(chatJID string, messageID string) (string, error) {
 var tmpProfileCache = misc.NewVMap[string, string]()
 
 func (a *Api) GetChatList() ([]ChatElement, error) {
-	cmList := store.GetChatList()
+	cmList := a.messageStore.GetChatList()
 	ce := make([]ChatElement, len(cmList))
 	for i, cm := range cmList {
 		var fc Contact
@@ -360,7 +361,7 @@ func (a *Api) buildQuotedContext(chatJID types.JID, quotedMessageID string) (*wa
 		return nil, nil
 	}
 
-	quotedMsg, err := store.GetMessageWithRaw(chatJID.String(), quotedMessageID)
+	quotedMsg, err := a.messageStore.GetMessageWithRaw(chatJID.String(), quotedMessageID)
 	if err != nil || quotedMsg == nil || quotedMsg.Content == nil {
 		return nil, fmt.Errorf("quoted message not found")
 	}
@@ -606,7 +607,7 @@ func (a *Api) SendMessage(chatJID string, content MessageContent) (string, error
 		},
 		Message: msgContent,
 	}
-	store.ProcessMessageEvent(a.ctx, a.waClient.Store.LIDs, msgEvent)
+	a.messageStore.ProcessMessageEvent(a.ctx, a.waClient.Store.LIDs, msgEvent)
 
 	// Extract message text for chat list update
 	var messageText string
@@ -652,7 +653,7 @@ func (a *Api) mainEventHandler(evt any) {
 		// buf, _ := json.Marshal(v)
 		// fmt.Println("[Event] Message:", string(buf))
 
-		store.ProcessMessageEvent(a.ctx, a.waClient.Store.LIDs, v)
+		a.messageStore.ProcessMessageEvent(a.ctx, a.waClient.Store.LIDs, v)
 
 		// Automatically cache images and stickers when they arrive
 		go func() {
@@ -725,7 +726,7 @@ func (a *Api) mainEventHandler(evt any) {
 		a.cw.Initialise(a.waClient)
 		a.waClient.SendPresence(a.ctx, types.PresenceAvailable)
 		// Run migration for messages.db
-		err := store.MigrateLIDToPNForMessagesDB(a.ctx, a.waClient.Store.LIDs)
+		err := a.messageStore.MigrateLIDToPNForMessagesDB(a.ctx, a.waClient.Store.LIDs)
 		if err != nil {
 			log.Println("Messages DB migration failed:", err)
 		} else {
@@ -815,7 +816,7 @@ func (a *Api) GetCachedImage(messageID string) (string, error) {
 	}
 
 	// Image not in cache, download and cache it
-	msg, err := store.GetMessageByIDWithRaw(messageID)
+	msg, err := a.messageStore.GetMessageByIDWithRaw(messageID)
 	if err != nil || msg == nil {
 		return "", fmt.Errorf("message not found")
 	}
