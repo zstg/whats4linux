@@ -5,7 +5,7 @@ import { MediaContent } from "./MediaContent"
 import { QuotedMessage } from "./QuotedMessage"
 import clsx from "clsx"
 import { MessageMenu } from "./MessageMenu"
-import { ClockPendingIcon, BlueTickIcon } from "../../assets/svgs/chat_icons"
+import { ClockPendingIcon, BlueTickIcon, ForwardedIcon } from "../../assets/svgs/chat_icons"
 
 interface MessageItemProps {
   message: store.DecodedMessage
@@ -127,6 +127,14 @@ export function MessageItem({
     }
   }, [content?.conversation, content?.extendedTextMessage])
 
+  const contextInfo =
+    content?.extendedTextMessage?.contextInfo ||
+    content?.imageMessage?.contextInfo ||
+    content?.videoMessage?.contextInfo ||
+    content?.audioMessage?.contextInfo ||
+    content?.documentMessage?.contextInfo ||
+    content?.stickerMessage?.contextInfo
+
   useEffect(() => {
     const caption =
       content?.imageMessage?.caption ||
@@ -135,21 +143,13 @@ export function MessageItem({
     if (caption) {
       RenderMarkdown(caption)
         .then(html => setRenderedCaptionMarkdown(html))
-        .catch(() => setRenderedCaptionMarkdown(caption))
+        .catch(() => setRenderedCaptionMarkdown("error" + caption))
     }
   }, [
     content?.imageMessage?.caption,
     content?.videoMessage?.caption,
     content?.documentMessage?.caption,
   ])
-
-  const contextInfo =
-    content?.extendedTextMessage?.contextInfo ||
-    content?.imageMessage?.contextInfo ||
-    content?.videoMessage?.contextInfo ||
-    content?.audioMessage?.contextInfo ||
-    content?.documentMessage?.contextInfo ||
-    content?.stickerMessage?.contextInfo
 
   const renderContent = () => {
     if (!content) return <span className="italic opacity-50">Empty Message</span>
@@ -241,6 +241,8 @@ export function MessageItem({
     return <span className="italic opacity-50 text-xs">Unsupported Message Type</span>
   }
 
+  const hasMedia = !!(content?.imageMessage || content?.videoMessage)
+
   return (
     <>
       <div
@@ -254,8 +256,9 @@ export function MessageItem({
       >
         <div
           className={clsx(
-            "max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg xl:max-w-xl rounded-lg p-2 ml-5 shadow-sm relative min-w-0",
+            "max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg xl:max-w-xl rounded-lg p-2 mx-5 shadow-sm relative min-w-0",
             {
+              "w-min": hasMedia,
               "bg-transparent shadow-none": isSticker,
 
               // SENT
@@ -283,13 +286,19 @@ export function MessageItem({
             onDelete={handleDelete}
           />
 
-          {!isFromMe && chatId.endsWith("@g.us") && !isSticker && (
+          {!isFromMe && chatId.endsWith("@g.us") && (
             <div className="text-[11px] font-semibold text-blue-500 mb-0.5">{senderName}</div>
+          )}
+          {contextInfo?.isForwarded && (
+            <div className="text-[10px] flex gap-1 italic items-center opacity-60 mb-1">
+              <ForwardedIcon />
+              Forwarded
+            </div>
           )}
           {contextInfo?.quotedMessage && (
             <QuotedMessage contextInfo={contextInfo} onQuotedClick={onQuotedClick} />
           )}
-          <div className="text-sm break-all whitespace-pre-wrap">{renderContent()}</div>
+          <div className="text-sm break-words whitespace-pre-wrap">{renderContent()}</div>
           <div className="text-[10px] text-right opacity-50 mt-1 flex items-center justify-end gap-1">
             <span>
               {new Date(message.Info.Timestamp).toLocaleTimeString([], {

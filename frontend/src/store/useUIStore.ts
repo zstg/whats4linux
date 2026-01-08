@@ -3,12 +3,14 @@ import { create } from "zustand"
 interface UIStore {
   sidebarOpen: boolean
   showEmojiPicker: boolean
+  chatInfoOpen: boolean
   typingIndicators: Record<string, boolean>
   onlineStatus: Record<string, boolean>
   notifications: Array<{ id: number; message: string }>
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
   setShowEmojiPicker: (show: boolean) => void
+  setChatInfoOpen: (open: boolean) => void
   setTypingIndicator: (chatId: string, isTyping: boolean) => void
   setOnlineStatus: (userId: string, isOnline: boolean) => void
   addNotification: (message: string) => number
@@ -18,6 +20,7 @@ interface UIStore {
 export const useUIStore = create<UIStore>(set => ({
   sidebarOpen: true,
   showEmojiPicker: false,
+  chatInfoOpen: false,
   typingIndicators: {},
   onlineStatus: {},
   notifications: [],
@@ -25,6 +28,7 @@ export const useUIStore = create<UIStore>(set => ({
   toggleSidebar: () => set(state => ({ sidebarOpen: !state.sidebarOpen })),
   setSidebarOpen: open => set({ sidebarOpen: open }),
   setShowEmojiPicker: show => set({ showEmojiPicker: show }),
+  setChatInfoOpen: open => set({ chatInfoOpen: open }),
 
   setTypingIndicator: (chatId, isTyping) =>
     set(state => ({
