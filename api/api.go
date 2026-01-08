@@ -1023,7 +1023,7 @@ func replaceMentions(text string, mentionedJIDs []string, a *Api) string {
 		contact, _ := a.waClient.Store.Contacts.GetContact(a.ctx, parsedJID)
 		displayName := contact.FullName
 		if displayName == "" {
-			displayName = "~" + contact.PushName
+			displayName = "~ " + contact.PushName
 		}
 		if displayName == "" {
 			displayName = parsedJID.User
@@ -1042,7 +1042,10 @@ func (a *Api) RenderMarkdown(md string, mentionedJIDs []string) string {
 	processed = replaceMentions(processed, mentionedJIDs, a)
 	return processed
 }
-
+func (a *Api) RenderMarkdownPlain(md string) string {
+	processed := markdown.MarkdownLinesToHTML(md)
+	return processed
+}
 func (a *Api) GetGroupInfo(jidStr string) (Group, error) {
 	if !strings.HasSuffix(jidStr, "@g.us") {
 		return Group{}, fmt.Errorf("JID is not a group JID")

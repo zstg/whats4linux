@@ -5,7 +5,7 @@ import { MediaContent } from "./MediaContent"
 import { QuotedMessage } from "./QuotedMessage"
 import clsx from "clsx"
 import { MessageMenu } from "./MessageMenu"
-import { ClockPendingIcon, BlueTickIcon } from "../../assets/svgs/chat_icons"
+import { ClockPendingIcon, BlueTickIcon, ForwardedIcon } from "../../assets/svgs/chat_icons"
 
 interface MessageItemProps {
   message: store.Message
@@ -127,24 +127,6 @@ export function MessageItem({
     }
   }, [content?.conversation, content?.extendedTextMessage])
 
-  useEffect(() => {
-    const caption =
-      content?.imageMessage?.caption ||
-      content?.videoMessage?.caption ||
-      content?.documentMessage?.caption
-    const contextInfo = content?.extendedTextMessage?.contextInfo
-    const mentionedJIDs = contextInfo?.mentionedJID || []
-    if (caption) {
-      RenderMarkdown(caption, mentionedJIDs)
-        .then(html => setRenderedCaptionMarkdown(html))
-        .catch(() => setRenderedCaptionMarkdown(caption))
-    }
-  }, [
-    content?.imageMessage?.caption,
-    content?.videoMessage?.caption,
-    content?.documentMessage?.caption,
-  ])
-
   const contextInfo =
     content?.extendedTextMessage?.contextInfo ||
     content?.imageMessage?.contextInfo ||
@@ -152,6 +134,23 @@ export function MessageItem({
     content?.audioMessage?.contextInfo ||
     content?.documentMessage?.contextInfo ||
     content?.stickerMessage?.contextInfo
+
+  useEffect(() => {
+    const caption =
+      content?.imageMessage?.caption ||
+      content?.videoMessage?.caption ||
+      content?.documentMessage?.caption
+    const mentionedJIDs = contextInfo?.mentionedJID || []
+    if (caption) {
+      RenderMarkdown(caption, mentionedJIDs)
+        .then(html => setRenderedCaptionMarkdown(html))
+        .catch(() => setRenderedCaptionMarkdown("error" + caption))
+    }
+  }, [
+    content?.imageMessage?.caption,
+    content?.videoMessage?.caption,
+    content?.documentMessage?.caption,
+  ])
 
   const renderContent = () => {
     if (!content) return <span className="italic opacity-50">Empty Message</span>
@@ -294,8 +293,14 @@ export function MessageItem({
             onDelete={handleDelete}
           />
 
-          {!isFromMe && chatId.endsWith("@g.us") && !isSticker && (
+          {!isFromMe && chatId.endsWith("@g.us") && (
             <div className="text-[11px] font-semibold text-blue-500 mb-0.5">{senderName}</div>
+          )}
+          {contextInfo?.isForwarded && (
+            <div className="text-[10px] flex gap-1 italic items-center opacity-60 mb-1">
+              <ForwardedIcon />
+              Forwarded
+            </div>
           )}
           {contextInfo?.quotedMessage && (
             <QuotedMessage contextInfo={contextInfo} onQuotedClick={onQuotedClick} />
