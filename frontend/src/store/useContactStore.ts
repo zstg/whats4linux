@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { immer } from "zustand/middleware/immer"
 import { GetContact } from "../../wailsjs/go/api/Api"
-import  { types } from "../../wailsjs/go/models"
+import { types } from "../../wailsjs/go/models"
 
 interface ContactStore {
   contacts: Record<string, { name: string; timestamp: number }>
