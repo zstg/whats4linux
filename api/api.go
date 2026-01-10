@@ -175,7 +175,7 @@ func canonicalUserJID(ctx context.Context, client *whatsmeow.Client, jid types.J
 		}
 	}
 
-	jid.ToNonAD();
+	jid.ToNonAD()
 
 	return jid
 }
