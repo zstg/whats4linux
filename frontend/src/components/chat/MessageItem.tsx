@@ -211,7 +211,7 @@ export function MessageItem({
     <>
       <div
         className={clsx(
-          "flex mb-2 group overflow-hidden transition duration-200",
+          "flex mb-2 group transition duration-200",
           isFromMe ? "justify-end" : "justify-start",
           {
             "bg-[#21C063]/50 dark:bg-[#21C063]/40": highlightedMessageId === message.Info.ID,
