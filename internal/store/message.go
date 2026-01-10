@@ -51,11 +51,6 @@ type ChatMessage struct {
 
 type writeJob func(*sql.Tx) error
 
-type pendingJob struct {
-	job  writeJob
-	done chan error
-}
-
 type MessageStore struct {
 	db *sql.DB
 
@@ -67,7 +62,7 @@ type MessageStore struct {
 	stmtInsert *sql.Stmt
 	stmtUpdate *sql.Stmt
 
-	writeCh chan pendingJob
+	writeCh chan writeJob
 }
 
 func NewMessageStore() (*MessageStore, error) {
@@ -81,7 +76,7 @@ func NewMessageStore() (*MessageStore, error) {
 		chatListMap:   misc.NewVMap[string, ChatMessage](),
 		mCache:        misc.NewVMap[string, uint8](),
 		reactionCache: misc.NewNMap[string, string, []string](),
-		writeCh:       make(chan pendingJob, 100),
+		writeCh:       make(chan writeJob, 100),
 	}
 
 	go ms.runWriter()
@@ -119,36 +114,28 @@ func NewMessageStore() (*MessageStore, error) {
 }
 
 func (ms *MessageStore) runWriter() {
-	for pJob := range ms.writeCh {
+	for job := range ms.writeCh {
 		tx, err := ms.db.Begin()
 		if err != nil {
-			if pJob.done != nil {
-				pJob.done <- err
-			}
 			continue
 		}
 
-		if err := pJob.job(tx); err != nil {
+		if err := job(tx); err != nil {
 			tx.Rollback()
-			if pJob.done != nil {
-				pJob.done <- err
-			}
 			continue
 		}
 
-		err = tx.Commit()
-		if pJob.done != nil {
-			pJob.done <- err
-		}
+		tx.Commit()
 	}
 }
 
 func (ms *MessageStore) runSync(job writeJob) error {
 	done := make(chan error, 1)
 
-	ms.writeCh <- pendingJob{
-		job:  job,
-		done: done,
+	ms.writeCh <- func(tx *sql.Tx) error {
+		err := job(tx)
+		done <- err
+		return err
 	}
 
 	return <-done
@@ -331,16 +318,13 @@ func (ms *MessageStore) migrateChatlist(ctx context.Context, sd store.LIDStore, 
 	// migrate all messages from this lid to pn
 	// hack: we won't update the msginfo, just update chat marker in messages for now
 	// complete the migrate on next restart when chat != msginfo.chat
-	ms.writeCh <- pendingJob{
-		job: func(tx *sql.Tx) error {
-			_, err := tx.Exec(
-				query.UpdateMessagesChat,
-				chat.String(),
-				lid.String(),
-			)
-			return err
-		},
-		done: nil,
+	ms.writeCh <- func(tx *sql.Tx) error {
+		_, err := tx.Exec(
+			query.UpdateMessagesChat,
+			chat.String(),
+			lid.String(),
+		)
+		return err
 	}
 	log.Printf("Migrated messages.chat marker from LID %s to PN %s\n", lid.String(), chat.String())
 
