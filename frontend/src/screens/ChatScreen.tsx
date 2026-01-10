@@ -425,7 +425,7 @@ export function ChatListScreen({ onOpenSettings }: ChatListScreenProps) {
   return (
     <div className="flex h-screen bg-light-secondary dark:bg-black overflow-hidden">
       <ResizablePanelGroup direction="horizontal" className="h-full">
-        {/* Chat List Sidebar */} 
+        {/* Chat List Sidebar */}
         <ResizablePanel
           defaultSize={30}
           className={clsx(
