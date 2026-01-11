@@ -1,6 +1,7 @@
 build/bin
 **/node_modules
 **/dist
+frontend/wailsjs
 .DS_Store
 .env
 whats4linux
