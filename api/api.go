@@ -354,24 +354,21 @@ func (a *Api) GetProfile(jidStr string) (Contact, error) {
 	}, nil
 }
 
-func (a *Api) buildQuotedContext(chatJID types.JID, quotedMessageID string) (*waE2E.ContextInfo, error) {
-	if quotedMessageID == "" {
-		return nil, nil
+func buildQuotedMessage(msg *store.ExtendedMessage) *waE2E.Message {
+	if msg == nil {
+		return nil
 	}
-
-	msg, err := a.messageStore.GetMessageWithMedia(chatJID.String(), quotedMessageID)
-	if err != nil {
-		return nil, fmt.Errorf("quoted message not found")
-	}
-
 	var quotedMessage waE2E.Message
-
 	if msg.ReplyToMessageID == "" {
 		quotedMessage.Conversation = proto.String(msg.Text)
 	} else {
 		quotedMessage.ExtendedTextMessage = &waE2E.ExtendedTextMessage{
 			Text: proto.String(msg.Text),
 		}
+	}
+
+	if msg.Media == nil {
+		return &quotedMessage
 	}
 
 	switch msg.Media.GetMediaGeneralType() {
@@ -423,10 +420,29 @@ func (a *Api) buildQuotedContext(chatJID types.JID, quotedMessageID string) (*wa
 		}
 	}
 
+	return &quotedMessage
+}
+
+func (a *Api) buildQuotedContext(chatJID types.JID, quotedMessageID string) (*waE2E.ContextInfo, error) {
+	if quotedMessageID == "" {
+		return nil, nil
+	}
+
+	msg, err := a.messageStore.GetMessageWithMedia(chatJID.String(), quotedMessageID)
+	if err != nil {
+		return nil, fmt.Errorf("quoted message not found")
+	}
+
+	quotedMessage := buildQuotedMessage(msg)
+
+	if quotedMessage == nil {
+		return nil, fmt.Errorf("failed to build quoted message")
+	}
+
 	stanzaID := quotedMessageID
 	contextInfo := &waE2E.ContextInfo{
 		StanzaID:      &stanzaID,
-		QuotedMessage: &quotedMessage,
+		QuotedMessage: quotedMessage,
 	}
 
 	if msg.Info.Sender.User != "" {

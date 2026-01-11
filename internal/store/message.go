@@ -839,7 +839,7 @@ func (ms *MessageStore) GetReactionsByMessageID(messageID string) ([]Reaction, e
 	cacheMap := make(map[string][]string)
 	for rows.Next() {
 		var reaction Reaction
-		err := rows.Scan(&reaction.MessageID, &reaction.SenderID, &reaction.Emoji)
+		err := rows.Scan(&reaction.ID, &reaction.MessageID, &reaction.SenderID, &reaction.Emoji)
 		if err != nil {
 			return nil, err
 		}
@@ -1142,9 +1142,10 @@ func (ms *MessageStore) GetDecodedMessage(chatJID string, messageID string) (*De
 		var text sql.NullString
 		var msgType sql.NullInt32
 
+		msg.ChatJID = chatJID
+		msg.MessageID = messageID
+
 		err := tx.QueryRow(query.SelectDecodedMessageByChatAndID, chatJID, messageID).Scan(
-			&msg.MessageID,
-			&msg.ChatJID,
 			&msg.SenderJID,
 			&msg.Timestamp,
 			&msg.IsFromMe,
