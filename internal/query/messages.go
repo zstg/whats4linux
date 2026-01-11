@@ -40,10 +40,10 @@ const (
 	`
 
 	SelectDecodedMessageByChatAndID = `
-	SELECT sender_jid, timestamp, is_from_me, text, reply_to_message_id, edited, forwarded, mm.type
-	FROM messages
-	LEFT JOIN message_media AS mm ON mm.message_id = messages.message_id
-	WHERE chat_jid = ? AND message_id = ?
+	SELECT m.sender_jid, m.timestamp, m.is_from_me, m.text, m.reply_to_message_id, m.edited, m.forwarded, mm.type
+	FROM messages AS m
+	LEFT JOIN message_media AS mm ON mm.message_id = m.message_id
+	WHERE m.chat_jid = ? AND m.message_id = ?
 	LIMIT 1
 	`
 
@@ -69,9 +69,8 @@ const (
 		ORDER BY timestamp DESC
 		LIMIT ?
 	) AS m 
-	LEFT JOIN message_media AS mm
-    	ON mm.message_id = m.message_id
-	ORDER BY timestamp ASC
+	LEFT JOIN message_media AS mm ON mm.message_id = m.message_id
+	ORDER BY m.timestamp ASC
 	`
 
 	SelectLatestMessagesByChat = `
@@ -83,9 +82,8 @@ const (
 		ORDER BY timestamp DESC
 		LIMIT ?
 	) AS m
-	LEFT JOIN message_media AS mm
-    	ON mm.message_id = m.message_id
-	ORDER BY timestamp ASC
+	LEFT JOIN message_media AS mm ON mm.message_id = m.message_id
+	ORDER BY m.timestamp ASC
 	`
 
 	SelectMessageByChatAndID = `
@@ -107,10 +105,9 @@ const (
 			) AS rn
 		FROM messages
 	) AS m
-	LEFT JOIN message_media AS mm
-    	ON mm.message_id = m.message_id
+	LEFT JOIN message_media AS mm ON mm.message_id = m.message_id
 	WHERE rn = 1
-	ORDER BY timestamp DESC;
+	ORDER BY m.timestamp DESC;
 	`
 
 	UpdateMessagesChat = `

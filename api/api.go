@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -745,6 +746,8 @@ func (a *Api) mainEventHandler(evt any) {
 					"timestamp":   v.Info.Timestamp.Unix(),
 					"sender":      v.Info.PushName,
 				})
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				log.Println("Failed to get decoded message after processing:", err)
 			}
 		}
 
