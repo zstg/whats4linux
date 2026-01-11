@@ -293,17 +293,31 @@ export function ChatListScreen({ onOpenSettings }: ChatListScreenProps) {
 
   const loadAvatars = useCallback(
     async (chatItems: ChatItem[]) => {
-      for (const chat of chatItems) {
-        if (chat.avatar) continue // Already has avatar
-        try {
-          const avatarURL = await GetCachedAvatar(chat.id, false)
-          if (mountedRef.current) {
-            updateSingleChat(chat.id, { avatar: avatarURL })
+      const chatsNeedingAvatars = chatItems.filter(c => !c.avatar)
+
+      if (chatsNeedingAvatars.length === 0) return
+
+      // Can change this later but
+      // 5 works well for now.
+      const CONCURRENCY = 5
+      let index = 0
+
+      const worker = async () => {
+        while (index < chatsNeedingAvatars.length) {
+          const chat = chatsNeedingAvatars[index++]
+
+          try {
+            const avatarURL = await GetCachedAvatar(chat.id, false)
+            if (avatarURL && mountedRef.current) {
+              useChatStore.getState().updateSingleChat(chat.id, { avatar: avatarURL })
+            }
+          } catch (err) {
+            console.error("Avatar load failed:", chat.id, err)
           }
-        } catch (err) {
-          console.error(`Error loading avatar for ${chat.id}:`, err)
         }
       }
+
+      await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()))
     },
     [updateSingleChat],
   )
