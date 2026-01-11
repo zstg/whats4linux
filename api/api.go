@@ -719,6 +719,10 @@ func (a *Api) SendMessage(chatJID string, content MessageContent) (string, error
 	return resp.ID, nil
 }
 
+func (a *Api) GetJIDUser(jid types.JID) string {
+	return jid.User
+}
+
 func (a *Api) mainEventHandler(evt any) {
 	switch v := evt.(type) {
 	case *events.Message:
