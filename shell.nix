@@ -1,20 +1,24 @@
 {
   pkgs ,
-  nodejs_24 ? pkgs.nodejs_24,
+  nodejs ? pkgs.nodejs_latest,
   go ? pkgs.go,
   wails ? pkgs.wails,
   jq ? pkgs.jq,
   pkg-config-unwrapped ? pkgs.pkg-config-unwrapped,
+  makeWrapper ? pkgs.makeWrapper,
+  fontconfig ? pkgs.fontconfig,
+  pkg-config ? pkgs.pkg-config,
   gtk3 ? pkgs.gtk3,
   glib ? pkgs.glib,
   pango ? pkgs.pango,
   harfbuzz ? pkgs.harfbuzz,
   cairo ? pkgs.cairo,
   gdk-pixbuf ? pkgs.gdk-pixbuf,
+  zlib ? pkgs.zlib,
   atk ? pkgs.atk,
   gcc ? pkgs.gcc,
-  webkitgtk ? pkgs.webkitgtk_4_1,
-  libsoup ? pkgs.libsoup_3,
+  webkitgtk_4_1 ? pkgs.webkitgtk_4_1,
+  libsoup_3 ? pkgs.libsoup_3,
 }:
 
 pkgs.mkShell {
@@ -24,26 +28,25 @@ pkgs.mkShell {
     jq
     pkg-config-unwrapped
     gcc
-    nodejs_24
-    pkgs.python3
-    pkgs.makeWrapper
-    pkgs.fontconfig
-    pkgs.pkg-config
+    nodejs
+    makeWrapper
+    fontconfig
+    pkg-config
   ];
 
   buildInputs = [
-    pkgs.gtk3.dev
-    pkgs.pkg-config
-    pkgs.pango.dev
-    pkgs.glib.dev
-    pkgs.harfbuzz.dev
-    pkgs.atk.dev
-    pkgs.cairo.dev
-    pkgs.gdk-pixbuf.dev
-    pkgs.zlib.dev
-    pkgs.fontconfig.dev
-    pkgs.webkitgtk_4_1.dev
-    pkgs.libsoup_3.dev
+    gtk3.dev
+    pkg-config
+    pango.dev
+    glib.dev
+    harfbuzz.dev
+    atk.dev
+    cairo.dev
+    gdk-pixbuf.dev
+    zlib.dev
+    fontconfig.dev
+    webkitgtk_4_1.dev
+    libsoup_3.dev
   ];
 
   shellHook = ''
@@ -54,18 +57,18 @@ pkgs.mkShell {
     NC='\033[0m' # No Color (resets the text color)
 
     # Set explicit LDFLAGS for FontConfig linking
-    export LDFLAGS="-L${pkgs.fontconfig.dev}/lib -lfontconfig"
+    export LDFLAGS="-L${fontconfig.dev}/lib -lfontconfig"
     
     # Compose PKG_CONFIG_PATH from all relevant dev outputs
     export PKG_CONFIG_PATH=""
-    for pkg in ${pkgs.gtk3.dev} ${pkgs.webkitgtk_4_1.dev} ${pkgs.pango.dev} ${pkgs.glib.dev} ${pkgs.harfbuzz.dev} ${pkgs.atk.dev} ${pkgs.cairo.dev} ${pkgs.gdk-pixbuf.dev} ${pkgs.libsoup_3.dev} ${pkgs.zlib.dev} ${pkgs.fontconfig.dev}; do
+    for pkg in ${gtk3.dev} ${webkitgtk_4_1.dev} ${pango.dev} ${glib.dev} ${harfbuzz.dev} ${atk.dev} ${cairo.dev} ${gdk-pixbuf.dev} ${libsoup_3.dev} ${zlib.dev} ${fontconfig.dev}; do
       if [ -d "$pkg/lib/pkgconfig" ]; then
         export PKG_CONFIG_PATH="$pkg/lib/pkgconfig:$PKG_CONFIG_PATH"
       fi
     done
     export PKG_CONFIG_PATH
     export LD_LIBRARY_PATH=""
-    for pkg in ${pkgs.gtk3.dev} ${pkgs.webkitgtk_4_1.dev} ${pkgs.pango.dev} ${pkgs.glib.dev} ${pkgs.harfbuzz.dev} ${pkgs.atk.dev} ${pkgs.cairo.dev} ${pkgs.gdk-pixbuf.dev} ${pkgs.libsoup_3.dev} ${pkgs.zlib.dev} ${pkgs.fontconfig.dev}; do
+    for pkg in ${gtk3.dev} ${webkitgtk_4_1.dev} ${pango.dev} ${glib.dev} ${harfbuzz.dev} ${atk.dev} ${cairo.dev} ${gdk-pixbuf.dev} ${libsoup_3.dev} ${zlib.dev} ${fontconfig.dev}; do
       if [ -d "$pkg/lib" ]; then
         export LD_LIBRARY_PATH="$pkg/lib:$LD_LIBRARY_PATH"
       fi

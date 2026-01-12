@@ -17,7 +17,7 @@
   fontconfig,
   webkitgtk_4_1,
   libsoup_3,
-  nodejs_24,
+  nodejs_latest,
 }:
 
 let
@@ -33,10 +33,10 @@ frontend = buildNpmPackage {
       # runHook preBuild
       
       # Fix shebang lines for all node executables
-      find node_modules/.bin -type f -exec sed -i 's|#!/usr/bin/env node|#!${nodejs_24}/bin/node|g' {} \; || true
+      find node_modules/.bin -type f -exec sed -i 's|#!/usr/bin/env node|#!${nodejs_latest}/bin/node|g' {} \; || true
 
       # Run TypeScript and Vite directly instead of npm script
-      ${nodejs_24}/bin/node node_modules/typescript/bin/tsc && ${nodejs_24}/bin/node node_modules/vite/bin/vite.js build
+      ${nodejs_latest}/bin/node node_modules/typescript/bin/tsc && ${nodejs_latest}/bin/node node_modules/vite/bin/vite.js build
       # runHook postBuild
     '';
     
@@ -54,11 +54,12 @@ buildGoModule {
   
   src = ./.;
   
-  vendorHash = "sha256-KzMQoQ1bQlxpx52CGNrCz4H0xJxYtr12GGvke1PksjY=";
+  vendorHash = "sha256-83Ht02V6N6F2E0Sf1+Z3v3Dc4o8b8BYKTDCSYdEfzXY=";
   
   proxyVendor = true;
   
-  subPackages = [ "." ];
+  subPackages = [ ]; # this defaults to "."
+  doBuild = false; 
   
   tags = [ "desktop,production" ];
   
@@ -66,7 +67,7 @@ buildGoModule {
     makeWrapper
     pkg-config
     wails
-    nodejs_24
+    nodejs_latest
   ];
   
   buildInputs = [
@@ -94,14 +95,26 @@ buildGoModule {
     # Build with Wails using buildGoModule's vendoring
     wails build -s -tags "webkit2_41,soup_3"
   '';
+
+  buildPhase = "runHook preBuild"; # no `go build`
+
+  installPhase = ''
+    runHook preInstall
+
+    mkdir -p $out/bin $out/lib
+    [ -d build/bin ] && cp build/bin/whats4linux $out/bin/ || true   
+    [ -d build/lib ] && cp build/lib/* $out/lib/ || true   
+
+    runHook postInstall
+  '';
   
-  postInstall = ''
+  postFixup = ''
     # Wrap the binary with required library paths
     wrapProgram $out/bin/whats4linux \
       --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [
         gtk3
-        webkitgtk_4_1.dev
-        libsoup_3.dev
+        webkitgtk_4_1
+        libsoup_3
       ]}" \
       --prefix PKG_CONFIG_PATH : "${lib.concatStringsSep ":" [
         "${gtk3.dev}/lib/pkgconfig"
