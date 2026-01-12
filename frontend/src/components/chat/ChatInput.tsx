@@ -122,12 +122,15 @@ export function ChatInput({
 }: ChatInputProps) {
   const hasContent = inputText.trim() || pastedImage || selectedFile
   const [senderName, setSenderName] = useState<string>("")
+  const [senderColor, setSenderColor] = useState<string>("")
   const [loadingSenderName, setLoadingSenderName] = useState<boolean>(false)
   const getContactName = useContactStore(state => state.getContactName)
+  const getContactColor = useContactStore(state => state.getContactColor)
 
   useEffect(() => {
     if (!replyingTo || replyingTo.Info.IsFromMe) {
       setSenderName("")
+      setSenderColor("")
       setLoadingSenderName(false)
       return
     }
@@ -146,12 +149,18 @@ export function ChatInput({
           if (!mounted) return
           setLoadingSenderName(false)
         })
+      getContactColor(participant)
+        .then((color: string) => {
+          if (!mounted) return
+          if (color) setSenderColor(color)
+        })
+        .catch(() => {})
 
       return () => {
         mounted = false
       }
     }
-  }, [replyingTo, getContactName])
+  }, [replyingTo, getContactName, getContactColor])
 
   const handleEmojiSelect = (emoji: any) => {
     onEmojiClick(emoji.native)
@@ -177,7 +186,10 @@ export function ChatInput({
     return (
       <div className="mb-2 flex items-start gap-2 rounded-md bg-black/5 dark:bg-white/10 p-2 text-xs">
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-green-600 dark:text-green-400 flex items-center gap-2">
+          <div
+            className="font-semibold flex items-center gap-2"
+            style={{ color: replyingTo.Info.IsFromMe ? undefined : senderColor }}
+          >
             {loadingSenderName && (
               <span className="w-3 h-3 rounded-full border-2 border-green-600 border-t-transparent animate-spin" />
             )}
@@ -202,7 +214,7 @@ export function ChatInput({
   return (
     <div
       className={clsx(
-        "relative p-2 mb-4 mx-5 border border-dark-secondary bg-light-bg dark:bg-dark-tertiary",
+        "relative p-2 mb-4 mx-5 border dark:border-dark-secondary bg-light-bg dark:bg-dark-tertiary",
         replyingTo || pastedImage || selectedFile ? "rounded-t-xl rounded-b-3xl" : "rounded-full",
       )}
     >

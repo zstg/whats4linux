@@ -6,6 +6,7 @@ import { QuotedMessage } from "./QuotedMessage"
 import clsx from "clsx"
 import { MessageMenu } from "./MessageMenu"
 import { ClockPendingIcon, BlueTickIcon, ForwardedIcon } from "../../assets/svgs/chat_icons"
+import { useContactStore } from "../../store/useContactStore"
 
 interface MessageItemProps {
   message: store.DecodedMessage
@@ -46,7 +47,8 @@ export function MessageItem({
   const isSticker = !!content?.stickerMessage
   const isPending = (message as any).isPending || false
   const [senderName, setSenderName] = useState("~ " + message.Info.PushName || "Unknown")
-
+  const [senderColor, setSenderColor] = useState<string | undefined>(undefined)
+  const getContactColor = useContactStore(state => state.getContactColor)
   // Helper function to render caption with markdown
   const renderCaption = (caption: string | undefined) => {
     if (!caption) return null
@@ -109,8 +111,13 @@ export function MessageItem({
           }
         })
         .catch(() => {})
+      getContactColor(message.Info.Sender)
+        .then((color: string) => {
+          setSenderColor(color)
+        })
+        .catch(() => {})
     }
-  }, [message.Info.Sender, chatId, isFromMe])
+  }, [message.Info.Sender, chatId, isFromMe, getContactColor])
 
   const contextInfo =
     content?.extendedTextMessage?.contextInfo ||
@@ -253,7 +260,12 @@ export function MessageItem({
           />
 
           {!isFromMe && chatId.endsWith("@g.us") && (
-            <div className="text-[11px] font-semibold text-blue-500 mb-0.5">{senderName}</div>
+            <div 
+            className="text-[11px] font-semibold mb-0.5"
+            style={{ color: senderColor }}
+            >
+              {senderName}
+            </div>
           )}
           {message.forwarded && (
             <div className="text-[10px] flex gap-1 italic items-center opacity-60 mb-1">
