@@ -27,7 +27,7 @@ frontend = buildNpmPackage {
     
     src = ./frontend;
     
-    npmDepsHash = "sha256-IUzpbPrNFdhWGQL/e9gNRlhZmR6L8ZYJKdB8VRHCViY=";
+    npmDepsHash = "sha256-QbMNbPKmWFaBszM2CCj6Qrd2b602K5z4zXgrqLJESmk=";
     
     buildPhase = ''
       # runHook preBuild
@@ -54,7 +54,7 @@ buildGoModule {
   
   src = ./.;
   
-  vendorHash = "sha256-83Ht02V6N6F2E0Sf1+Z3v3Dc4o8b8BYKTDCSYdEfzXY=";
+  vendorHash = "sha256-T1SEsdG+aFnfa0jpwhooOXJu/bzhSAAyDx49fD466V4=";
   
   proxyVendor = true;
   
@@ -130,7 +130,9 @@ buildGoModule {
         "${fontconfig.dev}/lib/pkgconfig"
       ]}"
   '';
-  
+
+  passthru.updateScript = "./update.sh --update-vendor";
+    
   meta = {
     homepage = "https://github.com/lugvitc/whats4linux";
     description = "An unofficial WhatsApp client for Linux";
