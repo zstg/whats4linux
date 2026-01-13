@@ -3,7 +3,6 @@
   version ? "0.0.1",
   makeWrapper,
   buildGoModule,
-  buildNpmPackage,
   pkg-config,
   wails,
   gtk3,
@@ -18,36 +17,10 @@
   webkitgtk_4_1,
   libsoup_3,
   nodejs_latest,
+  fetchNpmDeps,
+  npmHooks,
 }:
 
-let
-frontend = buildNpmPackage {
-    pname = "whats4linux-frontend";
-    inherit version;
-    
-    src = ./frontend;
-    
-    npmDepsHash = "sha256-QbMNbPKmWFaBszM2CCj6Qrd2b602K5z4zXgrqLJESmk=";
-    
-    buildPhase = ''
-      # runHook preBuild
-      
-      # Fix shebang lines for all node executables
-      find node_modules/.bin -type f -exec sed -i 's|#!/usr/bin/env node|#!${nodejs_latest}/bin/node|g' {} \; || true
-
-      # Run TypeScript and Vite directly instead of npm script
-      ${nodejs_latest}/bin/node node_modules/typescript/bin/tsc && ${nodejs_latest}/bin/node node_modules/vite/bin/vite.js build
-      # runHook postBuild
-    '';
-    
-    installPhase = ''
-      runHook preInstall
-      mkdir -p $out
-      cp -r dist $out/
-      runHook postInstall
-    '';
-  };
-in
 buildGoModule {
   pname = "whats4linux";
   inherit version;
@@ -57,6 +30,12 @@ buildGoModule {
   vendorHash = "sha256-T1SEsdG+aFnfa0jpwhooOXJu/bzhSAAyDx49fD466V4=";
   
   proxyVendor = true;
+  
+  npmDeps = fetchNpmDeps {
+    inherit version;
+    src = ./frontend;
+    hash = "sha256-QbMNbPKmWFaBszM2CCj6Qrd2b602K5z4zXgrqLJESmk=";
+  };
   
   subPackages = [ ]; # this defaults to "."
   doBuild = false; 
@@ -68,6 +47,7 @@ buildGoModule {
     pkg-config
     wails
     nodejs_latest
+    npmHooks.npmConfigHook
   ];
   
   buildInputs = [
@@ -84,16 +64,18 @@ buildGoModule {
     libsoup_3.dev
   ];
   
-  # Build frontend first
+  postPatch = ''
+    # Copy package.json and package-lock.json to root for npmConfigHook to find them
+    cp frontend/package.json ./
+    cp frontend/package-lock.json ./
+  '';
+  
   preBuild = ''
-    # Copy pre-built frontend
-    cp -r ${frontend}/dist frontend/
-    
     # Set up a proper home directory for binding generation
     export HOME=$(mktemp -d)
     
-    # Build with Wails using buildGoModule's vendoring
-    wails build -s -tags "webkit2_41,soup_3"
+    # Build with Wails - it will automatically handle frontend build
+    wails build -tags "webkit2_41,soup_3"
   '';
 
   buildPhase = "runHook preBuild"; # no `go build`
